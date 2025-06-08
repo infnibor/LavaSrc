@@ -42,6 +42,7 @@ publishing {
 	publications {
 		create<MavenPublication>("maven") {
 			from(components["java"])
+            groupId = "com.github.infnibor.lavasrc"
 			artifactId = base.archivesName.get()
 		}
 	}
