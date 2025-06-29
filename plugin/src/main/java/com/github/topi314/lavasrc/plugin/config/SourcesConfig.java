@@ -18,6 +18,7 @@ public class SourcesConfig {
 	private boolean qobuz = false;
 	private boolean tidal = false;
 	private boolean ytdlp = false;
+	private boolean amazonmusic = false;
 
 	public boolean isSpotify() {
 		return this.spotify;
@@ -97,5 +98,13 @@ public class SourcesConfig {
 
 	public void setYtdlp(boolean ytdlp) {
 		this.ytdlp = ytdlp;
+	}
+
+	public boolean isAmazonmusic() {
+		return this.amazonmusic;
+	}
+
+	public void setAmazonmusic(boolean amazonmusic) {
+		this.amazonmusic = amazonmusic;
 	}
 }

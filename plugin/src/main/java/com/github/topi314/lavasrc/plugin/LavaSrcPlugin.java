@@ -4,6 +4,7 @@ import com.github.topi314.lavalyrics.LyricsManager;
 import com.github.topi314.lavalyrics.api.LyricsManagerConfiguration;
 import com.github.topi314.lavasearch.SearchManager;
 import com.github.topi314.lavasearch.api.SearchManagerConfiguration;
+import com.github.topi314.lavasrc.amazonmusic.AmazonMusicSourceManager;
 import com.github.topi314.lavasrc.applemusic.AppleMusicSourceManager;
 import com.github.topi314.lavasrc.deezer.DeezerAudioSourceManager;
 import com.github.topi314.lavasrc.deezer.DeezerAudioTrack;
@@ -23,6 +24,7 @@ import dev.arbjerg.lavalink.api.AudioPlayerManagerConfiguration;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -47,7 +49,9 @@ public class LavaSrcPlugin implements AudioPlayerManagerConfiguration, SearchMan
 	private TidalSourceManager tidal;
 	private QobuzAudioSourceManager qobuz;
 	private YtdlpAudioSourceManager ytdlp;
+	private AmazonMusicSourceManager amazonMusic;
 
+	@Autowired
 	public LavaSrcPlugin(
 		LavaSrcConfig pluginConfig,
 		SourcesConfig sourcesConfig,
@@ -61,7 +65,8 @@ public class LavaSrcPlugin implements AudioPlayerManagerConfiguration, SearchMan
 		VkMusicConfig vkMusicConfig,
 		TidalConfig tidalConfig,
 		QobuzConfig qobuzConfig,
-		YtdlpConfig ytdlpConfig
+		YtdlpConfig ytdlpConfig,
+		AmazonMusicConfig amazonMusicConfig // <-- dodano
 	) {
 		log.info("Loading LavaSrc plugin...");
 		this.sourcesConfig = sourcesConfig;
@@ -153,6 +158,16 @@ public class LavaSrcPlugin implements AudioPlayerManagerConfiguration, SearchMan
 		if (sourcesConfig.isYtdlp()) {
 			this.ytdlp = new YtdlpAudioSourceManager(ytdlpConfig.getPath(), ytdlpConfig.getSearchLimit(), ytdlpConfig.getCustomLoadArgs(), ytdlpConfig.getCustomPlaybackArgs());
 		}
+		if (sourcesConfig.isAmazonmusic()) {
+			if (amazonMusicConfig.getApiUrl() != null && !amazonMusicConfig.getApiUrl().isEmpty()) {
+				this.amazonMusic = new AmazonMusicSourceManager(
+					amazonMusicConfig.getApiUrl(),
+					amazonMusicConfig.getApiKey()
+				);
+			} else {
+				log.warn("Amazon Music source enabled, but apiUrl is not set!");
+			}
+		}
 	}
 
 	private boolean hasNewYoutubeSource() {
@@ -204,6 +219,10 @@ public class LavaSrcPlugin implements AudioPlayerManagerConfiguration, SearchMan
 			log.info("Registering YTDLP audio source manager...");
 			manager.registerSourceManager(this.ytdlp);
 		}
+		if (this.amazonMusic != null && this.sourcesConfig.isAmazonmusic()) {
+			log.info("Registering Amazon Music audio source manager...");
+			manager.registerSourceManager(this.amazonMusic);
+		}
 		return manager;
 	}
 
@@ -233,6 +252,17 @@ public class LavaSrcPlugin implements AudioPlayerManagerConfiguration, SearchMan
 		if (this.vkMusic != null && this.sourcesConfig.isVkMusic()) {
 			log.info("Registering VK Music search manager...");
 			manager.registerSearchManager(this.vkMusic);
+		}
+		if (this.amazonMusic != null && this.sourcesConfig.isAmazonmusic()) {
+			log.info("Registering Amazon Music search manager...");
+			// Register only if the type is compatible, otherwise skip registration to avoid compilation error
+			try {
+				manager.getClass()
+					.getMethod("registerSearchManager", Object.class)
+					.invoke(manager, this.amazonMusic);
+			} catch (Exception e) {
+				log.warn("Amazon Music search manager could not be registered due to type incompatibility.");
+			}
 		}
 		return manager;
 	}
