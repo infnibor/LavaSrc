@@ -1,0 +1,59 @@
+package com.github.topi314.lavasrc.amazonmusic;
+
+import com.sedmelluq.discord.lavaplayer.track.*;
+import com.sedmelluq.discord.lavaplayer.source.AudioSourceManager;
+import com.sedmelluq.discord.lavaplayer.track.playback.LocalAudioTrackExecutor;
+import com.sedmelluq.discord.lavaplayer.source.http.HttpAudioTrack;
+import com.sedmelluq.discord.lavaplayer.source.http.HttpAudioSourceManager;
+
+import java.io.DataOutput;
+import java.io.DataInput;
+import java.io.IOException;
+
+public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
+    private final String audioUrl;
+    private final AmazonMusicSourceManager sourceManager;
+    private final HttpAudioSourceManager httpSourceManager;
+
+    public AmazonMusicAudioTrack(AudioTrackInfo trackInfo, String audioUrl, AmazonMusicSourceManager sourceManager) {
+        super(trackInfo);
+        this.audioUrl = audioUrl;
+        this.sourceManager = sourceManager;
+        this.httpSourceManager = new HttpAudioSourceManager();
+    }
+
+    @Override
+    public void process(LocalAudioTrackExecutor executor) throws Exception {
+        if (audioUrl == null || audioUrl.isEmpty()) {
+            throw new IllegalStateException("Missing audioUrl for Amazon Music track.");
+        }
+
+        InternalAudioTrack httpTrack = new HttpAudioTrack(
+                new AudioTrackInfo(
+                        trackInfo.title,
+                        trackInfo.author,
+                        trackInfo.length,
+                        trackInfo.identifier,
+                        trackInfo.isStream,
+                        audioUrl
+                ),
+                null,
+                httpSourceManager
+        );
+        processDelegate(httpTrack, executor);
+    }
+
+    public void encode(DataOutput output) throws IOException {
+        output.writeUTF(audioUrl != null ? audioUrl : "");
+    }
+
+    public static AmazonMusicAudioTrack decode(AudioTrackInfo trackInfo, DataInput input, AmazonMusicSourceManager sourceManager) throws IOException {
+        String audioUrl = input.readUTF();
+        return new AmazonMusicAudioTrack(trackInfo, audioUrl, sourceManager);
+    }
+
+    @Override
+    public AudioSourceManager getSourceManager() {
+        return sourceManager;
+    }
+}
