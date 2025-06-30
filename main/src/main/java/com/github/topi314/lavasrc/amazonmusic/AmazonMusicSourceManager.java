@@ -176,9 +176,6 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                 return new BasicAudioPlaylist(artistJson.name != null ? artistJson.name : "Amazon Music Artist", tracks, null, false);
             }
             return null;
-        } catch (IllegalStateException e) {
-            System.err.println("[AmazonMusic] [ERROR] " + e.getMessage());
-            return null;
         } catch (Exception e) {
             throw new FriendlyException("Failed to load Amazon Music item", FriendlyException.Severity.FAULT, e);
         }
