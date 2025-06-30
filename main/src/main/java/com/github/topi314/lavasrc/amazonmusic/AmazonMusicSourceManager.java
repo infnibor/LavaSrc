@@ -48,32 +48,49 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
         String trackAsin = matcher.group(3);
 
         try {
+            // Handle album with trackAsin (single track from album)
             if ("albums".equals(type) && trackAsin != null) {
-                String trackId = trackAsin;
-                TrackJson trackJson = fetchTrackInfo(trackId);
-                if (trackJson == null) return null;
-                System.out.println("[AmazonMusic] audioUrl: " + trackJson.audioUrl);
-                if (trackJson.audioUrl == null || !trackJson.audioUrl.matches("(?i).+\\.(mp3|m4a|flac|ogg|wav)(\\?.*)?$")) {
-                    System.err.println("[AmazonMusic] [ERROR] audioUrl does not look like an audio file: " + trackJson.audioUrl);
-                    throw new FriendlyException("Amazon Music API returned an invalid audioUrl: " + trackJson.audioUrl, FriendlyException.Severity.COMMON, null);
+                AlbumJson albumJson = fetchAlbumInfo(id);
+                if (albumJson == null || albumJson.tracks == null || albumJson.tracks.length == 0) return null;
+                TrackJson foundTrack = null;
+                for (TrackJson track : albumJson.tracks) {
+                    if (trackAsin.equals(track.id) || trackAsin.equals(extractJsonString(trackToJson(track), "asin", null))) {
+                        foundTrack = track;
+                        break;
+                    }
+                }
+                if (foundTrack == null) {
+                    System.err.println("[AmazonMusic] [ERROR] No track with id/asIn=" + trackAsin + " found in album " + id);
+                    return null;
+                }
+                // If audioUrl is null, fetch from /stream_urls endpoint
+                if (foundTrack.audioUrl == null) {
+                    foundTrack.audioUrl = fetchAudioUrlFromStreamUrls(foundTrack.id != null ? foundTrack.id : trackAsin);
+                }
+                if (foundTrack.audioUrl == null) {
+                    System.err.println("[AmazonMusic] [ERROR] audioUrl is still null after stream_urls for track: " + foundTrack.id);
+                    return null;
                 }
                 AudioTrackInfo info = new AudioTrackInfo(
-                    trackJson.title,
-                    trackJson.artist,
-                    trackJson.duration,
-                    trackId,
+                    foundTrack.title,
+                    foundTrack.artist,
+                    foundTrack.duration,
+                    foundTrack.id != null ? foundTrack.id : "",
                     false,
                     reference.identifier
                 );
-                return new AmazonMusicAudioTrack(info, trackJson.audioUrl, this);
+                return new AmazonMusicAudioTrack(info, foundTrack.audioUrl, this);
+            // Handle single track
             } else if ("tracks".equals(type)) {
                 String trackId = id;
                 TrackJson trackJson = fetchTrackInfo(trackId);
                 if (trackJson == null) return null;
-                System.out.println("[AmazonMusic] audioUrl: " + trackJson.audioUrl);
-                if (trackJson.audioUrl == null || !trackJson.audioUrl.matches("(?i).+\\.(mp3|m4a|flac|ogg|wav)(\\?.*)?$")) {
-                    System.err.println("[AmazonMusic] [ERROR] audioUrl does not look like an audio file: " + trackJson.audioUrl);
-                    throw new FriendlyException("Amazon Music API returned an invalid audioUrl: " + trackJson.audioUrl, FriendlyException.Severity.COMMON, null);
+                if (trackJson.audioUrl == null) {
+                    trackJson.audioUrl = fetchAudioUrlFromStreamUrls(trackId);
+                }
+                if (trackJson.audioUrl == null) {
+                    System.err.println("[AmazonMusic] [ERROR] audioUrl is still null after stream_urls for track: " + trackId);
+                    return null;
                 }
                 AudioTrackInfo info = new AudioTrackInfo(
                     trackJson.title,
@@ -84,15 +101,18 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                     reference.identifier
                 );
                 return new AmazonMusicAudioTrack(info, trackJson.audioUrl, this);
+            // Handle full album
             } else if ("albums".equals(type)) {
                 AlbumJson albumJson = fetchAlbumInfo(id);
                 if (albumJson == null || albumJson.tracks == null || albumJson.tracks.length == 0) return null;
                 List<AudioTrack> tracks = new java.util.ArrayList<>();
                 for (TrackJson track : albumJson.tracks) {
-                    if (track.audioUrl == null || !track.audioUrl.matches("(?i).+\\.(mp3|m4a|flac|ogg|wav)(\\?.*)?$")) {
-                        System.err.println("[AmazonMusic] [ERROR] album track audioUrl does not look like an audio file: " + track.audioUrl);
-                        continue;
+                    String audioUrl = track.audioUrl;
+                    // If audioUrl is null, fetch from /stream_urls endpoint
+                    if (audioUrl == null) {
+                        audioUrl = fetchAudioUrlFromStreamUrls(track.id);
                     }
+                    if (audioUrl == null) continue;
                     AudioTrackInfo info = new AudioTrackInfo(
                         track.title,
                         track.artist,
@@ -101,19 +121,22 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                         false,
                         reference.identifier
                     );
-                    tracks.add(new AmazonMusicAudioTrack(info, track.audioUrl, this));
+                    tracks.add(new AmazonMusicAudioTrack(info, audioUrl, this));
                 }
                 if (tracks.isEmpty()) return null;
                 return new BasicAudioPlaylist(albumJson.title != null ? albumJson.title : "Amazon Music Album", tracks, null, false);
+            // Handle playlist
             } else if ("playlists".equals(type)) {
                 PlaylistJson playlistJson = fetchPlaylistInfo(id);
                 if (playlistJson == null || playlistJson.tracks == null || playlistJson.tracks.length == 0) return null;
                 List<AudioTrack> tracks = new java.util.ArrayList<>();
                 for (TrackJson track : playlistJson.tracks) {
-                    if (track.audioUrl == null || !track.audioUrl.matches("(?i).+\\.(mp3|m4a|flac|ogg|wav)(\\?.*)?$")) {
-                        System.err.println("[AmazonMusic] [ERROR] playlist track audioUrl does not look like an audio file: " + track.audioUrl);
-                        continue;
+                    String audioUrl = track.audioUrl;
+                    // If audioUrl is null, fetch from /stream_urls endpoint
+                    if (audioUrl == null) {
+                        audioUrl = fetchAudioUrlFromStreamUrls(track.id);
                     }
+                    if (audioUrl == null) continue;
                     AudioTrackInfo info = new AudioTrackInfo(
                         track.title,
                         track.artist,
@@ -122,19 +145,22 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                         false,
                         reference.identifier
                     );
-                    tracks.add(new AmazonMusicAudioTrack(info, track.audioUrl, this));
+                    tracks.add(new AmazonMusicAudioTrack(info, audioUrl, this));
                 }
                 if (tracks.isEmpty()) return null;
                 return new BasicAudioPlaylist(playlistJson.title != null ? playlistJson.title : "Amazon Music Playlist", tracks, null, false);
+            // Handle artist (top tracks)
             } else if ("artists".equals(type)) {
                 ArtistJson artistJson = fetchArtistInfo(id);
                 if (artistJson == null || artistJson.tracks == null || artistJson.tracks.length == 0) return null;
                 List<AudioTrack> tracks = new java.util.ArrayList<>();
                 for (TrackJson track : artistJson.tracks) {
-                    if (track.audioUrl == null || !track.audioUrl.matches("(?i).+\\.(mp3|m4a|flac|ogg|wav)(\\?.*)?$")) {
-                        System.err.println("[AmazonMusic] [ERROR] artist track audioUrl does not look like an audio file: " + track.audioUrl);
-                        continue;
+                    String audioUrl = track.audioUrl;
+                    // If audioUrl is null, fetch from /stream_urls endpoint
+                    if (audioUrl == null) {
+                        audioUrl = fetchAudioUrlFromStreamUrls(track.id);
                     }
+                    if (audioUrl == null) continue;
                     AudioTrackInfo info = new AudioTrackInfo(
                         track.title,
                         track.artist,
@@ -143,14 +169,13 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                         false,
                         reference.identifier
                     );
-                    tracks.add(new AmazonMusicAudioTrack(info, track.audioUrl, this));
+                    tracks.add(new AmazonMusicAudioTrack(info, audioUrl, this));
                 }
                 if (tracks.isEmpty()) return null;
                 return new BasicAudioPlaylist(artistJson.name != null ? artistJson.name : "Amazon Music Artist", tracks, null, false);
             }
             return null;
         } catch (Exception e) {
-            // Error details are logged above, this is a fallback for unexpected exceptions
             throw new FriendlyException("Failed to load Amazon Music item", FriendlyException.Severity.FAULT, e);
         }
     }
@@ -394,5 +419,53 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 
     @Override
     public void shutdown() {
+    }
+
+    /**
+     * Fetches audioUrl from /stream_urls?id={track_id} endpoint.
+     */
+    private String fetchAudioUrlFromStreamUrls(String trackId) throws IOException {
+        if (trackId == null) return null;
+        String url = apiUrl.endsWith("/") ? apiUrl + "stream_urls?id=" + trackId : apiUrl + "/stream_urls?id=" + trackId;
+        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+        conn.setRequestMethod("GET");
+        conn.setConnectTimeout(5000);
+        conn.setReadTimeout(5000);
+        if (apiKey != null && !apiKey.isEmpty()) {
+            conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+        }
+        int status = conn.getResponseCode();
+        if (status != 200) {
+            return null;
+        }
+        BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+        StringBuilder content = new StringBuilder();
+        String line;
+        while ((line = in.readLine()) != null) {
+            content.append(line);
+        }
+        in.close();
+        conn.disconnect();
+
+        String json = content.toString();
+        // Example response: {"urls": {"high":"https://...mp3", ...}}
+        String audioUrl = null;
+        // Try "high", then "medium", then "low"
+        audioUrl = extractJsonString(json, "high", null);
+        if (audioUrl == null) audioUrl = extractJsonString(json, "medium", null);
+        if (audioUrl == null) audioUrl = extractJsonString(json, "low", null);
+        return audioUrl;
+    }
+
+    // Helper to convert TrackJson to JSON string for asin extraction if needed
+    private String trackToJson(TrackJson track) {
+        StringBuilder sb = new StringBuilder("{");
+        if (track.id != null) sb.append("\"id\":\"").append(track.id).append("\",");
+        if (track.title != null) sb.append("\"title\":\"").append(track.title).append("\",");
+        if (track.artist != null) sb.append("\"artist\":\"").append(track.artist).append("\",");
+        sb.append("\"duration\":").append(track.duration).append(",");
+        if (track.audioUrl != null) sb.append("\"audioUrl\":\"").append(track.audioUrl).append("\"");
+        sb.append("}");
+        return sb.toString();
     }
 }
