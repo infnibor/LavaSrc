@@ -38,11 +38,8 @@ public class AmazonMusicParser {
 		String name = extractValue(NAME_PATTERN, json);
 		String artist = extractValue(ARTIST_PATTERN, json);
 
-		if (name == null || name.isEmpty()) {
-			name = "Unknown Song";
-		}
-		if (artist == null || artist.isEmpty()) {
-			artist = "Unknown Artist";
+		if (name == null || artist == null) {
+			return "Unknown Title";
 		}
 
 		return artist + " - " + name;

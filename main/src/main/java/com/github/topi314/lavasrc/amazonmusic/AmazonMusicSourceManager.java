@@ -389,7 +389,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 
         String json = content.toString();
         TrackJson result = new TrackJson();
-        result.title = extractJsonString(json, "title", "Unknown Song");
+        result.title = extractJsonString(json, "title", "Unknown Title");
         result.artist = extractJsonString(json, "artist", "Unknown Artist");
         result.duration = extractJsonLong(json, "duration", 0L);
         result.audioUrl = extractJsonString(json, "audioUrl", null);
@@ -398,9 +398,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
     }
 
     private static String extractJsonString(String json, String key, String def) {
-        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\"" + key + "\"\\s*:\\s*\"(.*?)\"").matcher(json);
-        String value = matcher.find() ? matcher.group(1) : null;
-        return value != null && !value.isEmpty() ? value.trim() : def;
+        return AmazonMusicParser.parseAmazonTitle(json);
     }
 
     private static long extractJsonLong(String json, String key, long def) {
@@ -474,14 +472,14 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 		java.util.regex.Matcher urlsMatcher = java.util.regex.Pattern.compile("\"urls\"\\s*:\\s*\\{(.*?)\\}").matcher(json);
 		if (urlsMatcher.find()) {
 			String urlsContent = urlsMatcher.group(1);
-			audioUrl = extractJsonString(urlsContent, "high", null);
-			if (audioUrl == null) audioUrl = extractJsonString(urlsContent, "medium", null);
-			if (audioUrl == null) audioUrl = extractJsonString(urlsContent, "low", null);
+			audioUrl = extractJsonString(urlsContent, "high");
+			if (audioUrl == null) audioUrl = extractJsonString(urlsContent, "medium");
+			if (audioUrl == null) audioUrl = extractJsonString(urlsContent, "low");
 		}
 
 		// If not found in "urls", try "audioUrl" directly
 		if (audioUrl == null) {
-			audioUrl = extractJsonString(json, "audioUrl", null);
+			audioUrl = extractJsonString(json, "audioUrl");
 		}
 
 		// Log error if audioUrl is still null
@@ -492,6 +490,15 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 
 		return audioUrl;
 	}
+
+	/**
+	 * Extracts a JSON string value for a given key using regex (no JSON parser used).
+	 */
+	private String extractJsonString(String json, String key) {
+		java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\"" + key + "\"\\s*:\\s*\"(.*?)\"").matcher(json);
+		return matcher.find() ? matcher.group(1) : null;
+	}
+
 
     // Helper to convert TrackJson to JSON string for asin extraction if needed
     private String trackToJson(TrackJson track) {
