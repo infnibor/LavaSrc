@@ -429,7 +429,10 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 	 * Fetches audioUrl from /stream_urls?id={track_id} endpoint.
 	 */
 	private String fetchAudioUrlFromStreamUrls(String trackId) throws IOException {
-		if (trackId == null) return null;
+		if (trackId == null) {
+			System.err.println("[AmazonMusic] [ERROR] Track ID is null.");
+			return null;
+		}
 
 		String url = apiUrl.endsWith("/") ? apiUrl + "stream_urls?id=" + trackId : apiUrl + "/stream_urls?id=" + trackId;
 		HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
