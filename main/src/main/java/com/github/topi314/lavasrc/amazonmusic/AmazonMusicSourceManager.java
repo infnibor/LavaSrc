@@ -15,6 +15,7 @@ import java.io.InputStreamReader;
 import java.io.BufferedReader;
 import java.util.List;
 import java.util.ArrayList;
+import java.io.InputStream;
 
 public class AmazonMusicSourceManager implements AudioSourceManager {
     private static final String AMAZON_MUSIC_URL_REGEX =
@@ -421,47 +422,71 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
     public void shutdown() {
     }
 
-    /**
-     * Fetches audioUrl from /stream_urls?id={track_id} endpoint.
-     */
-    private String fetchAudioUrlFromStreamUrls(String trackId) throws IOException {
-        if (trackId == null) return null;
-        String url = apiUrl.endsWith("/") ? apiUrl + "stream_urls?id=" + trackId : apiUrl + "/stream_urls?id=" + trackId;
-        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
-        conn.setRequestMethod("GET");
-        conn.setConnectTimeout(5000);
-        conn.setReadTimeout(5000);
-        if (apiKey != null && !apiKey.isEmpty()) {
-            conn.setRequestProperty("Authorization", "Bearer " + apiKey);
-        }
-        int status = conn.getResponseCode();
-        if (status != 200) {
-            return null;
-        }
-        BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-        StringBuilder content = new StringBuilder();
-        String line;
-        while ((line = in.readLine()) != null) {
-            content.append(line);
-        }
-        in.close();
-        conn.disconnect();
-        String json = content.toString();
+	/**
+	 * Fetches audioUrl from /stream_urls?id={track_id} endpoint.
+	 */
+	private String fetchAudioUrlFromStreamUrls(String trackId) throws IOException {
+		if (trackId == null) return null;
 
-        java.util.regex.Matcher urlsMatcher = java.util.regex.Pattern.compile("\"urls\"\\s*:\\s*\\{(.*?)\\}").matcher(json);
-        String audioUrl = null;
-        if (urlsMatcher.find()) {
-            String urlsContent = urlsMatcher.group(1);
-            audioUrl = extractJsonString(urlsContent, "high", null);
-            if (audioUrl == null) audioUrl = extractJsonString(urlsContent, "medium", null);
-            if (audioUrl == null) audioUrl = extractJsonString(urlsContent, "low", null);
-        }
+		String url = apiUrl.endsWith("/") ? apiUrl + "stream_urls?id=" + trackId : apiUrl + "/stream_urls?id=" + trackId;
+		HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+		conn.setRequestMethod("GET");
+		conn.setConnectTimeout(5000);
+		conn.setReadTimeout(5000);
+		if (apiKey != null && !apiKey.isEmpty()) {
+			conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+		}
 
-        if (audioUrl == null) {
-            audioUrl = extractJsonString(json, "audioUrl", null);
-        }
-        return audioUrl;
-    }
+		int status = conn.getResponseCode();
+		InputStream inputStream = (status >= 200 && status < 300) ? conn.getInputStream() : conn.getErrorStream();
+
+		BufferedReader in = new BufferedReader(new InputStreamReader(inputStream));
+		StringBuilder content = new StringBuilder();
+		String line;
+		while ((line = in.readLine()) != null) {
+			content.append(line);
+		}
+		in.close();
+		conn.disconnect();
+
+		String json = content.toString();
+		if (status != 200) {
+			System.err.println("[AmazonMusic] [ERROR] Failed to fetch stream_urls for track: " + trackId);
+			System.err.println("Response: " + json);
+			return null;
+		}
+
+		// Searching for the "urls" object: { ... }
+		String audioUrl = null;
+		java.util.regex.Matcher urlsMatcher = java.util.regex.Pattern.compile("\"urls\"\\s*:\\s*\\{(.*?)\\}").matcher(json);
+		if (urlsMatcher.find()) {
+			String urlsContent = urlsMatcher.group(1);
+			audioUrl = extractJsonString(urlsContent, "high");
+			if (audioUrl == null) audioUrl = extractJsonString(urlsContent, "medium");
+			if (audioUrl == null) audioUrl = extractJsonString(urlsContent, "low");
+		}
+
+		// If not found in "urls", try "audioUrl" directly
+		if (audioUrl == null) {
+			audioUrl = extractJsonString(json, "audioUrl");
+		}
+
+		if (audioUrl == null) {
+			System.err.println("[AmazonMusic] [ERROR] audioUrl is still null after processing stream_urls for track: " + trackId);
+			audioUrl = "";
+		}
+
+		return audioUrl;
+	}
+
+	/**
+	 * Extracts a JSON string value for a given key using regex (no JSON parser used).
+	 */
+	private String extractJsonString(String json, String key) {
+		java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\"" + key + "\"\\s*:\\s*\"(.*?)\"").matcher(json);
+		return matcher.find() ? matcher.group(1) : null;
+	}
+
 
     // Helper to convert TrackJson to JSON string for asin extraction if needed
     private String trackToJson(TrackJson track) {
