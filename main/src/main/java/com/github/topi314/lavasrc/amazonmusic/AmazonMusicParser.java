@@ -9,18 +9,20 @@ import java.util.regex.Pattern;
  */
 public class AmazonMusicParser {
 
-	// Regex patterns to extract the artist and title
+	// Regex patterns to extract the artist, title and audio URL
 	private static final Pattern ARTIST_PATTERN = Pattern.compile("\"artist\"\\s*:\\s*\"(.*?)\"");
 	private static final Pattern NAME_PATTERN = Pattern.compile("\"name\"\\s*:\\s*\"(.*?)\"");
+	private static final Pattern AUDIO_URL_PATTERN = Pattern.compile("\"audioUrl\"\\s*:\\s*\"(.*?)\"");
 
 	/**
 	 * Parses a JSON string returned from Amazon Music and extracts the song title and artist.
-	 * Expected JSON structure:
+	 * Expected JSON structure (simplified example):
 	 * {
 	 *   "catalog": {
 	 *     "title": {
 	 *       "name": "Song Name",
-	 *       "artist": "Artist Name"
+	 *       "artist": "Artist Name",
+	 *       "audioUrl": "https://example.com/path/to/audio.mp3"
 	 *     }
 	 *   }
 	 * }
@@ -41,6 +43,19 @@ public class AmazonMusicParser {
 		}
 
 		return artist + " - " + name;
+	}
+
+	/**
+	 * Parses the audio URL from the JSON string.
+	 *
+	 * @param json the raw JSON response as a string
+	 * @return the audio URL or null if not found
+	 */
+	public static String parseAudioUrl(String json) {
+		if (json == null || json.isEmpty()) {
+			return null;
+		}
+		return extractValue(AUDIO_URL_PATTERN, json);
 	}
 
 	/**

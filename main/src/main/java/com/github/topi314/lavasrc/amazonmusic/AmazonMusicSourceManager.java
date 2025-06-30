@@ -506,4 +506,17 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
         sb.append("}");
         return sb.toString();
     }
+
+    public void playTrackFromJson(String json) {
+        String title = AmazonMusicParser.parseAmazonTitle(json);
+        String audioUrl = AmazonMusicParser.parseAudioUrl(json);
+
+        if (audioUrl == null) {
+            System.err.println("No valid audio URL found, cannot play track");
+        } else {
+            System.out.println("Playing track: " + title);
+            System.out.println("Audio URL: " + audioUrl);
+            // Tutaj podaj audioUrl do silnika odtwarzania, np. LavaPlayer
+        }
+    }
 }
