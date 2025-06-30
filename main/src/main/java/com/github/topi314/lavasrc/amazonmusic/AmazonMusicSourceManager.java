@@ -1,5 +1,6 @@
 package com.github.topi314.lavasrc.amazonmusic;
 
+import com.github.topi314.lavasrc.amazonmusic.AmazonMusicParser;
 import com.sedmelluq.discord.lavaplayer.source.AudioSourceManager;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
 import com.sedmelluq.discord.lavaplayer.track.*;
@@ -392,9 +393,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
     }
 
     private static String extractJsonString(String json, String key, String def) {
-        String regex = "\"" + key + "\"\\s*:\\s*\"([^\"]*)\"";
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile(regex).matcher(json);
-        return m.find() ? m.group(1) : def;
+        return AmazonMusicParser.parseAmazonTitle(json);
     }
 
     private static long extractJsonLong(String json, String key, long def) {
@@ -410,7 +409,11 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 
     @Override
     public void encodeTrack(AudioTrack track, DataOutput output) throws IOException {
-        ((AmazonMusicAudioTrack) track).encode(output);
+        if (track instanceof AmazonMusicAudioTrack) {
+            ((AmazonMusicAudioTrack) track).encode(output);
+        } else {
+            throw new IllegalArgumentException("Unsupported track type for encoding.");
+        }
     }
 
     @Override
