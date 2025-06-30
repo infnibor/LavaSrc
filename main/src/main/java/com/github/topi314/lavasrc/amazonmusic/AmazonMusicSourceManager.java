@@ -20,7 +20,7 @@ import java.io.InputStream;
 
 public class AmazonMusicSourceManager implements AudioSourceManager {
     private static final String AMAZON_MUSIC_URL_REGEX =
-        "https?:\\/\\/music\\.amazon\\.[a-z.]+\\/(tracks|albums|playlists|artists)\\/([A-Za-z0-9]+)(?:\\?trackAsin=([A-Za-z0-9]+))?";
+        "https?:\\/\\/music\\.amazon\\.[a-z.]+\\/(tracks|albums|playlists|artists)\\/([A-Za-z0-9]+)(?:\\?[^\\s]*)?";
     private static final Pattern AMAZON_MUSIC_URL_PATTERN = Pattern.compile(AMAZON_MUSIC_URL_REGEX);
 
     private final String apiUrl;
@@ -238,7 +238,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
             t.duration = extractJsonLong(obj, "duration", 0L);
             t.audioUrl = extractJsonString(obj, "audioUrl", null);
             t.id = extractJsonString(obj, "id", null);
-            if (t.audioUrl == null || !t.audioUrl.matches("(?i).+\\.(mp3|m4a|flac|ogg|wav)(\\?.*)?$")) continue;
+            if (t.audioUrl == null || !isSupportedAudioFormat(t.audioUrl)) continue;
             AudioTrackInfo info = new AudioTrackInfo(
                 t.title,
                 t.artist,
@@ -507,16 +507,20 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
         return sb.toString();
     }
 
+    private static boolean isSupportedAudioFormat(String audioUrl) {
+        return audioUrl.matches("(?i).+\\.(mp3|m4a|flac|ogg|wav)(\\?.*)?$");
+    }
+
     public void playTrackFromJson(String json) {
         String title = AmazonMusicParser.parseAmazonTitle(json);
         String audioUrl = AmazonMusicParser.parseAudioUrl(json);
 
-        if (audioUrl == null) {
-            System.err.println("No valid audio URL found, cannot play track");
+        if (audioUrl == null || !isSupportedAudioFormat(audioUrl)) {
+            System.err.println("No valid audio URL found or unsupported file format, cannot play track");
         } else {
-            System.out.println("Playing track: " + title);
+            System.out.println("Track details:");
+            System.out.println("Title: " + title);
             System.out.println("Audio URL: " + audioUrl);
-            // Tutaj podaj audioUrl do silnika odtwarzania, np. LavaPlayer
         }
     }
 }
