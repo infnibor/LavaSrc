@@ -470,7 +470,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 
 		// Searching for the "urls" object: { ... }
 		String audioUrl = null;
-		Matcher urlsMatcher = Pattern.compile("\"urls\"\\s*:\\s*\\{(.*?)\\}").matcher(json);
+		java.util.regex.Matcher urlsMatcher = java.util.regex.Pattern.compile("\"urls\"\\s*:\\s*\\{(.*?)\\}").matcher(json);
 		if (urlsMatcher.find()) {
 			String urlsContent = urlsMatcher.group(1);
 			audioUrl = extractJsonString(urlsContent, "high");
@@ -486,7 +486,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 		// Log error if audioUrl is still null
 		if (audioUrl == null || audioUrl.isEmpty()) {
 			System.err.println("[AmazonMusic] [ERROR] audioUrl is still null after processing stream_urls for track: " + trackId);
-			return null;
+			throw new IllegalStateException("Missing audioUrl for Amazon Music track: " + trackId);
 		}
 
 		return audioUrl;
