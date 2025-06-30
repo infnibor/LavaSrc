@@ -446,14 +446,20 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
         }
         in.close();
         conn.disconnect();
-
         String json = content.toString();
-        // Example response: {"urls": {"high":"https://...mp3", ...}}
+
+        java.util.regex.Matcher urlsMatcher = java.util.regex.Pattern.compile("\"urls\"\\s*:\\s*\\{(.*?)\\}").matcher(json);
         String audioUrl = null;
-        // Try "high", then "medium", then "low"
-        audioUrl = extractJsonString(json, "high", null);
-        if (audioUrl == null) audioUrl = extractJsonString(json, "medium", null);
-        if (audioUrl == null) audioUrl = extractJsonString(json, "low", null);
+        if (urlsMatcher.find()) {
+            String urlsContent = urlsMatcher.group(1);
+            audioUrl = extractJsonString(urlsContent, "high", null);
+            if (audioUrl == null) audioUrl = extractJsonString(urlsContent, "medium", null);
+            if (audioUrl == null) audioUrl = extractJsonString(urlsContent, "low", null);
+        }
+
+        if (audioUrl == null) {
+            audioUrl = extractJsonString(json, "audioUrl", null);
+        }
         return audioUrl;
     }
 
