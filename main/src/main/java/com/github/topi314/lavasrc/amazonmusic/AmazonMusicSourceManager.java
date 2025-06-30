@@ -92,6 +92,10 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                 String trackId = id;
                 TrackJson trackJson = fetchTrackInfo(trackId);
                 if (trackJson == null) return null;
+
+                // Fetch artwork URL
+                String artworkUrl = AmazonMusicParser.parseArtworkUrl(trackToJson(trackJson));
+
                 if (trackJson.audioUrl == null) {
                     trackJson.audioUrl = fetchAudioUrlFromStreamUrls(trackId);
                 }
@@ -107,7 +111,9 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                     false,
                     reference.identifier
                 );
-                return new AmazonMusicAudioTrack(info, trackJson.audioUrl, this);
+                AmazonMusicAudioTrack track = new AmazonMusicAudioTrack(info, trackJson.audioUrl, this);
+                track.setArtworkUrl(artworkUrl);
+                return track;
             // Handle full album
             } else if ("albums".equals(type)) {
                 AlbumJson albumJson = fetchAlbumInfo(id);
@@ -120,6 +126,10 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                         audioUrl = fetchAudioUrlFromStreamUrls(track.id);
                     }
                     if (audioUrl == null) continue;
+
+                    // Fetch artwork URL
+                    String artworkUrl = AmazonMusicParser.parseArtworkUrl(trackToJson(track));
+
                     AudioTrackInfo info = new AudioTrackInfo(
                         track.title,
                         track.artist,
@@ -128,7 +138,9 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                         false,
                         reference.identifier
                     );
-                    tracks.add(new AmazonMusicAudioTrack(info, audioUrl, this));
+                    AmazonMusicAudioTrack audioTrack = new AmazonMusicAudioTrack(info, audioUrl, this);
+                    audioTrack.setArtworkUrl(artworkUrl);
+                    tracks.add(audioTrack);
                 }
                 if (tracks.isEmpty()) return null;
                 return new BasicAudioPlaylist(albumJson.title != null ? albumJson.title : "Amazon Music Album", tracks, null, false);

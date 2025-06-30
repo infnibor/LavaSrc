@@ -15,6 +15,7 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
     private final String audioUrl;
     private final AmazonMusicSourceManager sourceManager;
     private final HttpAudioSourceManager httpSourceManager;
+    private String artworkUrl;
 
     public AmazonMusicAudioTrack(AudioTrackInfo trackInfo, String audioUrl, AmazonMusicSourceManager sourceManager) {
         super(trackInfo);
@@ -61,5 +62,13 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
     @Override
     public AudioSourceManager getSourceManager() {
         return sourceManager;
+    }
+
+    public void setArtworkUrl(String artworkUrl) {
+        this.artworkUrl = artworkUrl;
+    }
+
+    public String getArtworkUrl() {
+        return artworkUrl;
     }
 }
