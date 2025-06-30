@@ -38,11 +38,8 @@ public class AmazonMusicParser {
 		String name = extractValue(NAME_PATTERN, json);
 		String artist = extractValue(ARTIST_PATTERN, json);
 
-		if (name == null || name.isEmpty()) {
-			name = "Unknown Song";
-		}
-		if (artist == null || artist.isEmpty()) {
-			artist = "Unknown Artist";
+		if (name == null || artist == null) {
+			return "Unknown Title";
 		}
 
 		return artist + " - " + name;
@@ -70,18 +67,6 @@ public class AmazonMusicParser {
 	 */
 	private static String extractValue(Pattern pattern, String text) {
 		Matcher matcher = pattern.matcher(text);
-		return matcher.find() ? matcher.group(1).trim() : null;
-	}
-
-	/**
-	 * Extracts a JSON string value for a given key using regex (no JSON parser used).
-	 *
-	 * @param json The JSON string to search.
-	 * @param key The key to extract the value for.
-	 * @return The extracted value or null if not found.
-	 */
-	public static String extractJsonString(String json, String key) {
-		Matcher matcher = Pattern.compile("\"" + key + "\"\\s*:\\s*\"(.*?)\"").matcher(json);
 		return matcher.find() ? matcher.group(1) : null;
 	}
 }

@@ -20,7 +20,7 @@ import java.io.InputStream;
 
 public class AmazonMusicSourceManager implements AudioSourceManager {
     private static final String AMAZON_MUSIC_URL_REGEX =
-	    "https?:\\/\\/music\\.amazon\\.[a-z.]+\\/(tracks|albums|playlists|artists)\\/([A-Za-z0-9]+)";
+        "https?:\\/\\/music\\.amazon\\.[a-z.]+\\/(tracks|albums|playlists|artists)\\/([A-Za-z0-9]+)";
     private static final Pattern AMAZON_MUSIC_URL_PATTERN = Pattern.compile(AMAZON_MUSIC_URL_REGEX);
 
     private final String apiUrl;
@@ -389,7 +389,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 
         String json = content.toString();
         TrackJson result = new TrackJson();
-        result.title = extractJsonString(json, "title", "Unknown Song");
+        result.title = extractJsonString(json, "title", "Unknown Title");
         result.artist = extractJsonString(json, "artist", "Unknown Artist");
         result.duration = extractJsonLong(json, "duration", 0L);
         result.audioUrl = extractJsonString(json, "audioUrl", null);
@@ -398,8 +398,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
     }
 
     private static String extractJsonString(String json, String key, String def) {
-        String value = AmazonMusicParser.extractJsonString(json, key);
-        return value != null && !value.isEmpty() ? value.trim() : def;
+        return AmazonMusicParser.parseAmazonTitle(json);
     }
 
     private static long extractJsonLong(String json, String key, long def) {
