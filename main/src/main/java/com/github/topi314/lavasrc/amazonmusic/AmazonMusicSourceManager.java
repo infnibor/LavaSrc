@@ -20,7 +20,7 @@ import java.io.InputStream;
 
 public class AmazonMusicSourceManager implements AudioSourceManager {
     private static final String AMAZON_MUSIC_URL_REGEX =
-        "https?:\\/\\/music\\.amazon\\.[a-z.]+\\/(tracks|albums|playlists|artists)\\/([A-Za-z0-9]+)(?:\\?[^\\s]*)?";
+        "https?:\\/\\/music\\.amazon\\.[a-z.]+\\/(tracks|albums|playlists|artists)\\/([A-Za-z0-9]+)";
     private static final Pattern AMAZON_MUSIC_URL_PATTERN = Pattern.compile(AMAZON_MUSIC_URL_REGEX);
 
     private final String apiUrl;
@@ -47,7 +47,12 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
         }
         String type = matcher.group(1);
         String id = matcher.group(2);
-        String trackAsin = matcher.group(3);
+
+        id = id.split("[^a-zA-Z0-9]", 2)[0];
+
+        String trackAsin = reference.identifier.contains("?") ? extractQueryParam(reference.identifier, "trackAsin") : null;
+
+        String queryParams = reference.identifier.contains("?") ? reference.identifier.split("\\?", 2)[1] : null;
 
         try {
             // Handle album with trackAsin (single track from album)
@@ -522,5 +527,16 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
             System.out.println("Title: " + title);
             System.out.println("Audio URL: " + audioUrl);
         }
+    }
+	/**
+	 * Extracts a query parameter value from a URL.
+	 *
+	 * @param url The URL to extract the parameter from.
+	 * @param paramName The name of the parameter to extract.
+	 * @return The value of the parameter, or null if not found.
+	 */
+    private String extractQueryParam(String url, String paramName) {
+        Matcher matcher = Pattern.compile("[?&]" + paramName + "=([^&]*)").matcher(url);
+        return matcher.find() ? matcher.group(1) : null;
     }
 }
