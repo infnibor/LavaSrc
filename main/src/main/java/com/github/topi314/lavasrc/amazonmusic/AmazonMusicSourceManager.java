@@ -471,9 +471,10 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 			audioUrl = extractJsonString(json, "audioUrl");
 		}
 
-		if (audioUrl == null) {
+		// Log error if audioUrl is still null
+		if (audioUrl == null || audioUrl.isEmpty()) {
 			System.err.println("[AmazonMusic] [ERROR] audioUrl is still null after processing stream_urls for track: " + trackId);
-			audioUrl = "";
+			throw new IllegalStateException("Missing audioUrl for Amazon Music track: " + trackId);
 		}
 
 		return audioUrl;

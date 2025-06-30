@@ -26,9 +26,11 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
     @Override
     public void process(LocalAudioTrackExecutor executor) throws Exception {
         if (audioUrl == null || audioUrl.isEmpty()) {
+            System.err.println("[AmazonMusicAudioTrack] [ERROR] Missing audioUrl for track: " + trackInfo.identifier);
             throw new IllegalStateException("Missing audioUrl for Amazon Music track.");
         }
         if (!audioUrl.matches("(?i).+\\.(mp3|m4a|flac|ogg|wav)(\\?.*)?$")) {
+            System.err.println("[AmazonMusicAudioTrack] [ERROR] Unsupported file format for audioUrl: " + audioUrl);
             throw new FriendlyException("Unknown file format for Amazon Music track: " + audioUrl, FriendlyException.Severity.COMMON, null);
         }
 
