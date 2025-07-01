@@ -46,6 +46,9 @@ public class AmazonMusicParser {
 		// Extract title and artist from the JSON
 		String title = extractValue(Pattern.compile("\"title\"\\s*:\\s*\"(.*?)\""), json);
 		String artist = extractValue(Pattern.compile("\"artist\"\\s*:\\s*\\{.*?\"name\"\\s*:\\s*\"(.*?)\""), json);
+		if (artist == null) {
+			artist = extractValue(Pattern.compile("\"artist\"\\s*:\\s*\"(.*?)\""), json);
+		}
 
 		// Log extracted values
 		System.out.println("[AmazonMusicParser] [DEBUG] Extracted title: " + title);

@@ -532,6 +532,9 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
         String artist;
         long duration;
         String audioUrl;
+        String asin;
+        String image;
+        String isrc;
     }
 
     private TrackJson fetchTrackInfo(String trackId) throws IOException {
@@ -563,6 +566,9 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
         result.duration = extractJsonLong(json, "duration", 0L);
         result.audioUrl = extractJsonString(json, "audioUrl", null);
         result.id = extractJsonString(json, "id", null);
+        result.asin = extractJsonString(json, "asin", null);
+        result.image = extractJsonString(json, "image", null);
+        result.isrc = extractJsonString(json, "isrc", null);
         return result;
     }
 
@@ -677,16 +683,19 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 	}
 
 
-    // Helper to convert TrackJson to JSON string for asin extraction if needed
+    // Helper to convert TrackJson to JSON string for parser (full data)
     private String trackToJson(TrackJson track) {
         StringBuilder sb = new StringBuilder("{");
         if (track.id != null) sb.append("\"id\":\"").append(track.id).append("\",");
         if (track.title != null) sb.append("\"title\":\"").append(track.title).append("\",");
         if (track.artist != null) sb.append("\"artist\":\"").append(track.artist).append("\",");
         sb.append("\"duration\":").append(track.duration).append(",");
-        if (track.audioUrl != null) sb.append("\"audioUrl\":\"").append(track.audioUrl).append("\"");
+        if (track.audioUrl != null) sb.append("\"audioUrl\":\"").append(track.audioUrl).append("\",");
+        if (track.asin != null) sb.append("\"asin\":\"").append(track.asin).append("\",");
+        if (track.image != null) sb.append("\"image\":\"").append(track.image).append("\",");
+        if (track.isrc != null) sb.append("\"isrc\":\"").append(track.isrc).append("\"");
         sb.append("}");
-        return sb.toString();
+        return sb.toString().replace(",}", "}");
     }
 
     private static boolean isSupportedAudioFormat(String audioUrl) {
