@@ -51,13 +51,23 @@ public class AmazonMusicParser {
 	 * Parses the audio URL from the JSON string.
 	 *
 	 * @param json the raw JSON response as a string
-	 * @return the audio URL or null if not found
+	 * @return the audio URL or null if not found or invalid
 	 */
 	public static String parseAudioUrl(String json) {
 		if (json == null || json.isEmpty()) {
+			System.err.println("[AmazonMusicParser] [ERROR] JSON is null or empty.");
 			return null;
 		}
-		return extractValue(AUDIO_URL_PATTERN, json);
+
+		String audioUrl = extractValue(AUDIO_URL_PATTERN, json);
+
+		// Validate the audio URL format
+		if (audioUrl == null || !audioUrl.matches("(?i).+\\.(mp3|m4a|flac|ogg|wav)(\\?.*)?$")) {
+			System.err.println("[AmazonMusicParser] [ERROR] Invalid or unsupported audio URL: " + audioUrl);
+			return null;
+		}
+
+		return audioUrl;
 	}
 
 	/**

@@ -37,6 +37,8 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
             throw new FriendlyException("Unsupported file format for Amazon Music track: " + audioUrl, FriendlyException.Severity.COMMON, null);
         }
 
+        System.out.println("[AmazonMusicAudioTrack] [INFO] Processing track with audioUrl: " + audioUrl);
+
         // Create an internal HTTP track and pass it to the delegate
         InternalAudioTrack httpTrack = new HttpAudioTrack(
                 new AudioTrackInfo(
