@@ -61,6 +61,9 @@ public class AmazonMusicParser {
 
 		String audioUrl = extractValue(AUDIO_URL_PATTERN, json);
 
+		// Log the extracted audioUrl
+		System.out.println("[AmazonMusicParser] [DEBUG] Extracted audioUrl: " + audioUrl);
+
 		// Validate the audio URL format
 		if (audioUrl == null || !audioUrl.matches("(?i).+\\.(mp3|m4a|flac|ogg|wav)(\\?.*)?$")) {
 			System.err.println("[AmazonMusicParser] [ERROR] Invalid or unsupported audio URL: " + audioUrl);

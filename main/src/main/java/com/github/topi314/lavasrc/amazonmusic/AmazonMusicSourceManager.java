@@ -602,6 +602,8 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 		}
 
 		String url = apiUrl.endsWith("/") ? apiUrl + "stream_urls?id=" + trackId : apiUrl + "/stream_urls?id=" + trackId;
+		System.out.println("[AmazonMusic] [DEBUG] Fetching stream URLs from: " + url);
+
 		HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
 		conn.setRequestMethod("GET");
 		conn.setConnectTimeout(10000);
@@ -623,6 +625,8 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 		conn.disconnect();
 
 		String json = content.toString();
+		System.out.println("[AmazonMusic] [DEBUG] Response JSON: " + json);
+
 		if (status != 200) {
 			System.err.println("[AmazonMusic] [ERROR] Failed to fetch stream_urls for track: " + trackId);
 			System.err.println("Response: " + json);
