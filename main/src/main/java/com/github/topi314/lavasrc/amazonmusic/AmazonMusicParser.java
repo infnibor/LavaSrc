@@ -34,13 +34,22 @@ public class AmazonMusicParser {
 	 */
 	public static String parseAmazonTitle(String json) {
 		if (json == null || json.isEmpty()) {
+			System.err.println("[AmazonMusicParser] [ERROR] JSON is null or empty.");
 			return "Unknown Title";
 		}
+
+		// Log the raw JSON input
+		System.out.println("[AmazonMusicParser] [DEBUG] Raw JSON for title: " + json);
 
 		String name = extractValue(NAME_PATTERN, json);
 		String artist = extractValue(ARTIST_PATTERN, json);
 
+		// Log extracted values
+		System.out.println("[AmazonMusicParser] [DEBUG] Extracted name: " + name);
+		System.out.println("[AmazonMusicParser] [DEBUG] Extracted artist: " + artist);
+
 		if (name == null || artist == null) {
+			System.err.println("[AmazonMusicParser] [ERROR] Failed to extract name or artist.");
 			return "Unknown Title";
 		}
 
@@ -60,7 +69,7 @@ public class AmazonMusicParser {
 		}
 
 		// Log the raw JSON input
-		System.out.println("[AmazonMusicParser] [DEBUG] Raw JSON: " + json);
+		System.out.println("[AmazonMusicParser] [DEBUG] Raw JSON for audioUrl: " + json);
 
 		String audioUrl = extractValue(AUDIO_URL_PATTERN, json);
 
