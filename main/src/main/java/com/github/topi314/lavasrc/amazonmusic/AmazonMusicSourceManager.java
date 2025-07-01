@@ -175,7 +175,6 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                     reference.identifier
                 );
                 AmazonMusicAudioTrack track = new AmazonMusicAudioTrack(info, trackJson.audioUrl, isrc, artworkUrl, this);
-                track.setArtworkUrl(artworkUrl);
                 return track;
             // Handle full album
             } else if ("albums".equals(type)) {
@@ -201,7 +200,6 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                         reference.identifier
                     );
                     AmazonMusicAudioTrack audioTrack = new AmazonMusicAudioTrack(info, audioUrl, isrc, artworkUrl, this);
-                    audioTrack.setArtworkUrl(artworkUrl);
                     tracks.add(audioTrack);
                 }
                 if (tracks.isEmpty()) return null;
@@ -332,7 +330,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
             t.id = extractJsonString(obj, "id", null);
             // Add parsing for asin, image, isrc
             t.asin = extractJsonString(obj, "asin", null);
-            t.image = extractJsonString(obj, "image", null);
+            t.artworkUrl = extractJsonString(obj, "image", null);
             t.isrc = extractJsonString(obj, "isrc", null);
             if (t.audioUrl == null || !isSupportedAudioFormat(t.audioUrl)) continue;
             AudioTrackInfo info = new AudioTrackInfo(
@@ -520,13 +518,12 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
             if (!obj.endsWith("}")) obj = obj + "}";
             TrackJson t = new TrackJson();
             t.title = extractJsonString(obj, "title", "Unknown Title");
-            // Try to extract artist from object or string (object first)
             t.artist = extractArtistFlexible(obj, "Unknown Artist");
             t.duration = extractJsonLong(obj, "duration", 0L);
             t.audioUrl = extractJsonString(obj, "audioUrl", null);
             t.id = extractJsonString(obj, "id", null);
             t.asin = extractJsonString(obj, "asin", null);
-            t.image = extractJsonString(obj, "image", null);
+            t.artworkUrl = extractJsonString(obj, "image", null);
             t.isrc = extractJsonString(obj, "isrc", null);
             tracks.add(t);
         }
@@ -558,13 +555,12 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
         String json = content.toString();
         TrackJson result = new TrackJson();
         result.title = extractJsonString(json, "title", "Unknown Title");
-        // Try to extract artist from object or string (object first)
         result.artist = extractArtistFlexible(json, "Unknown Artist");
         result.duration = extractJsonLong(json, "duration", 0L);
         result.audioUrl = extractJsonString(json, "audioUrl", null);
         result.id = extractJsonString(json, "id", null);
         result.asin = extractJsonString(json, "asin", null);
-        result.image = extractJsonString(json, "image", null);
+        result.artworkUrl = extractJsonString(json, "image", null);
         result.isrc = extractJsonString(json, "isrc", null);
         return result;
     }
@@ -695,7 +691,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
         sb.append("\"duration\":").append(track.duration).append(",");
         if (track.audioUrl != null) sb.append("\"audioUrl\":\"").append(track.audioUrl).append("\",");
         if (track.asin != null) sb.append("\"asin\":\"").append(track.asin).append("\",");
-        if (track.image != null) sb.append("\"image\":\"").append(track.image).append("\",");
+        if (track.artworkUrl != null) sb.append("\"image\":\"").append(track.artworkUrl).append("\",");
         if (track.isrc != null) sb.append("\"isrc\":\"").append(track.isrc).append("\"");
         sb.append("}");
         return sb.toString().replace(",}", "}");
@@ -737,7 +733,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
         long duration;
         String audioUrl;
         String asin;
-        String image;
+        String artworkUrl; // zamiast image
         String isrc;
     }
 }
