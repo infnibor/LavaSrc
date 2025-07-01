@@ -42,19 +42,21 @@ public class AmazonMusicParser {
 		// Log the raw JSON input
 		System.out.println("[AmazonMusicParser] [DEBUG] Raw JSON for title: " + json);
 
-		String name = extractValue(NAME_PATTERN, json);
-		String artist = extractValue(ARTIST_NAME_PATTERN, json); // Use the new pattern to extract artist name
+		// Extract title and artist from the JSON
+		String title = extractValue(Pattern.compile("\"title\"\\s*:\\s*\"(.*?)\""), json);
+		String artist = extractValue(Pattern.compile("\"artist\"\\s*:\\s*\\{.*?\"name\"\\s*:\\s*\"(.*?)\""), json);
 
 		// Log extracted values
-		System.out.println("[AmazonMusicParser] [DEBUG] Extracted name: " + name);
+		System.out.println("[AmazonMusicParser] [DEBUG] Extracted title: " + title);
 		System.out.println("[AmazonMusicParser] [DEBUG] Extracted artist: " + artist);
 
-		if (name == null || artist == null) {
-			System.err.println("[AmazonMusicParser] [ERROR] Failed to extract name or artist.");
+		// Validate and return the formatted title
+		if (title == null || artist == null) {
+			System.err.println("[AmazonMusicParser] [ERROR] Failed to extract title or artist.");
 			return "Unknown Title";
 		}
 
-		return artist + " - " + name;
+		return artist + " - " + title;
 	}
 
 	/**
@@ -72,10 +74,30 @@ public class AmazonMusicParser {
 		// Log the raw JSON input
 		System.out.println("[AmazonMusicParser] [DEBUG] Raw JSON for audioUrl: " + json);
 
+		// Try to extract audioUrl directly
 		String audioUrl = extractValue(AUDIO_URL_PATTERN, json);
 
 		// Log the extracted audioUrl
 		System.out.println("[AmazonMusicParser] [DEBUG] Extracted audioUrl: " + audioUrl);
+
+		// If audioUrl is null, try to extract from nested "urls" object
+		if (audioUrl == null) {
+			System.out.println("[AmazonMusicParser] [DEBUG] Attempting to extract audioUrl from nested 'urls' object.");
+			Matcher urlsMatcher = Pattern.compile("\"urls\"\\s*:\\s*\\{(.*?)\\}").matcher(json);
+			if (urlsMatcher.find()) {
+				String urlsContent = urlsMatcher.group(1);
+				audioUrl = extractValue(Pattern.compile("\"high\"\\s*:\\s*\"(.*?)\""), urlsContent);
+				if (audioUrl == null) {
+					audioUrl = extractValue(Pattern.compile("\"medium\"\\s*:\\s*\"(.*?)\""), urlsContent);
+				}
+				if (audioUrl == null) {
+					audioUrl = extractValue(Pattern.compile("\"low\"\\s*:\\s*\"(.*?)\""), urlsContent);
+				}
+			}
+		}
+
+		// Log the final audioUrl
+		System.out.println("[AmazonMusicParser] [DEBUG] Final extracted audioUrl: " + audioUrl);
 
 		// Validate the audio URL format
 		if (audioUrl == null || !audioUrl.matches("(?i).+\\.(mp3|m4a|flac|ogg|wav)(\\?.*)?$")) {
