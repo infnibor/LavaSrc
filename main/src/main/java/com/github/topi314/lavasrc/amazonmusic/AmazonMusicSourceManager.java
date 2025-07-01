@@ -647,7 +647,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 			return null;
 		}
 
-		// Searching for the "urls" object: { ... }
+		// 1. Szukaj klasycznego audioUrl
 		String audioUrl = null;
 		java.util.regex.Matcher urlsMatcher = java.util.regex.Pattern.compile("\"urls\"\\s*:\\s*\\{(.*?)\\}").matcher(json);
 		if (urlsMatcher.find()) {
@@ -656,22 +656,65 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 			if (audioUrl == null) audioUrl = extractJsonString(urlsContent, "medium");
 			if (audioUrl == null) audioUrl = extractJsonString(urlsContent, "low");
 		}
-
-		// If not found in "urls", try "audioUrl" directly
 		if (audioUrl == null) {
 			audioUrl = extractJsonString(json, "audioUrl");
 		}
-
-		// Log the final audioUrl
-		System.out.println("[AmazonMusic] [DEBUG] Final audioUrl: " + audioUrl);
-
-		// Log error if audioUrl is still null
-		if (audioUrl == null || audioUrl.isEmpty()) {
-			System.err.println("[AmazonMusic] [ERROR] audioUrl is still null after processing stream_urls for track: " + trackId);
-			throw new IllegalStateException("Missing audioUrl for Amazon Music track: " + trackId);
+		// 2. Szukaj bezpośredniego linku do pliku mp3/flac/opus
+		if (audioUrl != null && isSupportedAudioFormat(audioUrl)) {
+			System.out.println("[AmazonMusic] [DEBUG] Final audioUrl: " + audioUrl);
+			return audioUrl;
 		}
 
-		return audioUrl;
+		// 3. Szukaj base_url z tablicy data[] dla najlepszego formatu
+		// Preferuj: mp3 > opus > flac > audio/mp4
+		String bestUrl = null;
+		String bestMime = null;
+		int bestQuality = -1;
+		java.util.regex.Matcher dataArrayMatcher = java.util.regex.Pattern.compile("\"data\"\\s*:\\s*\\[(.*?)\\](?!\\s*,)").matcher(json);
+		if (dataArrayMatcher.find()) {
+			String dataArray = dataArrayMatcher.group(1);
+			java.util.regex.Matcher entryMatcher = java.util.regex.Pattern.compile("\\{(.*?)\\}(,|$)").matcher(dataArray);
+			while (entryMatcher.find()) {
+				String entry = entryMatcher.group(1);
+
+				String mimeType = extractJsonString(entry, "mime_type");
+				String baseUrl = extractJsonString(entry, "base_url");
+				String codecs = extractJsonString(entry, "codecs");
+				int qualityRanking = -1;
+				try {
+					java.util.regex.Matcher qMatcher = java.util.regex.Pattern.compile("\"quality_ranking\"\\s*:\\s*(\\d+)").matcher(entry);
+					if (qMatcher.find()) qualityRanking = Integer.parseInt(qMatcher.group(1));
+				} catch (Exception ignore) {}
+
+				// Preferencje: mp3 > opus > flac > audio/mp4
+				int score = 0;
+				if (mimeType != null && mimeType.contains("mp3")) score = 100;
+				else if (codecs != null && codecs.contains("opus")) score = 90;
+				else if (codecs != null && codecs.contains("flac")) score = 80;
+				else if (mimeType != null && mimeType.contains("audio/mp4")) score = 70;
+				else score = 10;
+
+				// Im wyższy qualityRanking, tym lepiej (jeśli score równe)
+				if (baseUrl != null && score > bestQuality) {
+					bestUrl = baseUrl;
+					bestMime = mimeType;
+					bestQuality = score;
+				} else if (baseUrl != null && score == bestQuality && qualityRanking > 0) {
+					bestUrl = baseUrl;
+					bestMime = mimeType;
+					bestQuality = score;
+				}
+			}
+		}
+
+		if (bestUrl != null) {
+			System.out.println("[AmazonMusic] [DEBUG] Final base_url: " + bestUrl + " (mime_type: " + bestMime + ")");
+			return bestUrl;
+		}
+
+		// Log error jeśli nadal nie znaleziono
+		System.err.println("[AmazonMusic] [ERROR] audioUrl is still null after processing stream_urls for track: " + trackId);
+		return null;
 	}
 
 	/**
