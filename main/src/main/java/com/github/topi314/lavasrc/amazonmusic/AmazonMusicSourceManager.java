@@ -43,6 +43,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
     public AudioItem loadItem(com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager manager, AudioReference reference) {
         Matcher matcher = AMAZON_MUSIC_URL_PATTERN.matcher(reference.identifier);
         if (!matcher.matches()) {
+            System.err.println("[AmazonMusic] [ERROR] Invalid URL format: " + reference.identifier);
             return null;
         }
         String type = matcher.group(1);
@@ -192,10 +193,18 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                 }
                 if (tracks.isEmpty()) return null;
                 return new BasicAudioPlaylist(artistJson.name != null ? artistJson.name : "Amazon Music Artist", tracks, null, false);
+            } else {
+                System.err.println("[AmazonMusic] [ERROR] Unsupported type: " + type);
+                return null;
             }
-            return null;
+        } catch (IOException e) {
+            System.err.println("[AmazonMusic] [ERROR] Network error while loading item: " + e.getMessage());
+            e.printStackTrace();
+            throw new FriendlyException("Failed to load Amazon Music item due to network error", FriendlyException.Severity.FAULT, e);
         } catch (Exception e) {
-            throw new FriendlyException("Failed to load Amazon Music item", FriendlyException.Severity.FAULT, e);
+            System.err.println("[AmazonMusic] [ERROR] Unexpected error while loading item: " + e.getMessage());
+            e.printStackTrace();
+            throw new FriendlyException("Failed to load Amazon Music item due to unexpected error", FriendlyException.Severity.FAULT, e);
         }
     }
 
@@ -219,8 +228,8 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
         if (limit > 0) url += "&limit=" + limit;
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setRequestMethod("GET");
-        conn.setConnectTimeout(5000);
-        conn.setReadTimeout(5000);
+        conn.setConnectTimeout(10000);
+        conn.setReadTimeout(10000);
         if (apiKey != null && !apiKey.isEmpty()) {
             conn.setRequestProperty("Authorization", "Bearer " + apiKey);
         }
@@ -306,8 +315,8 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
     private <T> T fetchTracksContainer(String url, Class<T> clazz) throws IOException {
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setRequestMethod("GET");
-        conn.setConnectTimeout(5000);
-        conn.setReadTimeout(5000);
+        conn.setConnectTimeout(10000);
+        conn.setReadTimeout(10000);
         if (apiKey != null && !apiKey.isEmpty()) {
             conn.setRequestProperty("Authorization", "Bearer " + apiKey);
         }
@@ -381,8 +390,8 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
         String url = apiUrl.endsWith("/") ? apiUrl + "track?id=" + trackId : apiUrl + "/track?id=" + trackId;
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setRequestMethod("GET");
-        conn.setConnectTimeout(5000);
-        conn.setReadTimeout(5000);
+        conn.setConnectTimeout(10000);
+        conn.setReadTimeout(10000);
         if (apiKey != null && !apiKey.isEmpty()) {
             conn.setRequestProperty("Authorization", "Bearer " + apiKey);
         }
@@ -454,8 +463,8 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 		String url = apiUrl.endsWith("/") ? apiUrl + "stream_urls?id=" + trackId : apiUrl + "/stream_urls?id=" + trackId;
 		HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
 		conn.setRequestMethod("GET");
-		conn.setConnectTimeout(5000);
-		conn.setReadTimeout(5000);
+		conn.setConnectTimeout(10000);
+		conn.setReadTimeout(10000);
 		if (apiKey != null && !apiKey.isEmpty()) {
 			conn.setRequestProperty("Authorization", "Bearer " + apiKey);
 		}
