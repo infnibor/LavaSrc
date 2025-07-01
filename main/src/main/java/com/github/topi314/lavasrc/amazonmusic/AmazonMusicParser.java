@@ -59,6 +59,9 @@ public class AmazonMusicParser {
 			return null;
 		}
 
+		// Log the raw JSON input
+		System.out.println("[AmazonMusicParser] [DEBUG] Raw JSON: " + json);
+
 		String audioUrl = extractValue(AUDIO_URL_PATTERN, json);
 
 		// Log the extracted audioUrl

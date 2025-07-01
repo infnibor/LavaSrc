@@ -31,8 +31,8 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
         System.out.println("[AmazonMusicAudioTrack] [DEBUG] Audio URL: " + audioUrl);
 
         if (audioUrl == null || audioUrl.isEmpty()) {
-            System.err.println("[AmazonMusicAudioTrack] [ERROR] Missing audioUrl for track: " + trackInfo.identifier);
-            throw new IllegalStateException("Missing audioUrl for Amazon Music track.");
+            System.err.println("[AmazonMusicAudioTrack] [ERROR] Missing or invalid audioUrl for track: " + trackInfo.identifier);
+            throw new IllegalStateException("Missing or invalid audioUrl for Amazon Music track.");
         }
 
         // Check if audioUrl has a supported format
