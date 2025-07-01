@@ -43,11 +43,15 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
 
         System.out.println("[AmazonMusicAudioTrack] [INFO] Processing track with audioUrl: " + audioUrl);
 
+        // Extract proper title and author
+        String title = trackInfo.title.contains(" - ") ? trackInfo.title.split(" - ", 2)[1] : trackInfo.title;
+        String author = trackInfo.title.contains(" - ") ? trackInfo.title.split(" - ", 2)[0] : trackInfo.author;
+
         // Create an internal HTTP track and pass it to the delegate
         InternalAudioTrack httpTrack = new HttpAudioTrack(
                 new AudioTrackInfo(
-                        trackInfo.title != null ? trackInfo.title : "Unknown Title",
-                        trackInfo.author != null ? trackInfo.author : "Unknown Artist",
+                        title,
+                        author,
                         trackInfo.length,
                         trackInfo.identifier,
                         trackInfo.isStream,
