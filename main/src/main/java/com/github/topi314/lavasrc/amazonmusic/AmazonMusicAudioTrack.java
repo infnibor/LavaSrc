@@ -74,8 +74,8 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
     public static AmazonMusicAudioTrack decode(AudioTrackInfo trackInfo, DataInput input, AmazonMusicSourceManager sourceManager) throws IOException {
         String audioUrl = input.readUTF();
         // Placeholder values for ISRC and artworkUrl since they are not encoded
-        String isrc = "unknown";
-        String artworkUrl = "unknown";
+        String isrc = null;
+        String artworkUrl = null;
         return new AmazonMusicAudioTrack(trackInfo, audioUrl, isrc, artworkUrl, sourceManager);
     }
 
