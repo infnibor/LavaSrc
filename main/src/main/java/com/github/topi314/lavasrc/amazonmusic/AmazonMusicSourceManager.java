@@ -73,7 +73,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                         false,
                         reference.identifier
                     );
-                    tracks.add(new AmazonMusicAudioTrack(info, audioUrl, this));
+                    tracks.add(new AmazonMusicAudioTrack(info, audioUrl, null, null, this));
                 }
                 return new BasicAudioPlaylist(podcastJson.title != null ? podcastJson.title : "Podcast", tracks, null, false);
             }
@@ -92,7 +92,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                     false,
                     reference.identifier
                 );
-                return new AmazonMusicAudioTrack(info, audioUrl, this);
+                return new AmazonMusicAudioTrack(info, audioUrl, null, null, this);
             }
 
             // Handle song lyrics
@@ -150,32 +150,33 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                     false,
                     reference.identifier
                 );
-                return new AmazonMusicAudioTrack(info, foundTrack.audioUrl, this);
+
+                // Fetch ISRC and artwork URL
+                String isrc = AmazonMusicParser.parseIsrc(trackToJson(foundTrack));
+                String artworkUrl = AmazonMusicParser.parseArtworkUrl(trackToJson(foundTrack));
+
+                // Correct constructor call
+                return new AmazonMusicAudioTrack(info, foundTrack.audioUrl, isrc, artworkUrl, this);
             // Handle single track
             } else if ("tracks".equals(type)) {
                 String trackId = id;
                 TrackJson trackJson = fetchTrackInfo(trackId);
                 if (trackJson == null) return null;
 
-                // Fetch artwork URL
+                // Fetch ISRC and artwork URL
+                String isrc = AmazonMusicParser.parseIsrc(trackToJson(trackJson));
                 String artworkUrl = AmazonMusicParser.parseArtworkUrl(trackToJson(trackJson));
 
-                if (trackJson.audioUrl == null) {
-                    trackJson.audioUrl = fetchAudioUrlFromStreamUrls(trackId);
-                }
-                if (trackJson.audioUrl == null) {
-                    System.err.println("[AmazonMusic] [ERROR] audioUrl is still null after stream_urls for track: " + trackId);
-                    return null;
-                }
                 AudioTrackInfo info = new AudioTrackInfo(
                     trackJson.title,
                     trackJson.artist,
                     trackJson.duration,
-                    trackId,
+                    trackJson.id != null ? trackJson.id : "",
                     false,
                     reference.identifier
                 );
-                AmazonMusicAudioTrack track = new AmazonMusicAudioTrack(info, trackJson.audioUrl, this);
+
+                AmazonMusicAudioTrack track = new AmazonMusicAudioTrack(info, trackJson.audioUrl, isrc, artworkUrl, this);
                 track.setArtworkUrl(artworkUrl);
                 return track;
             // Handle full album
@@ -191,7 +192,8 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                     }
                     if (audioUrl == null) continue;
 
-                    // Fetch artwork URL
+                    // Fetch ISRC and artwork URL
+                    String isrc = AmazonMusicParser.parseIsrc(trackToJson(track));
                     String artworkUrl = AmazonMusicParser.parseArtworkUrl(trackToJson(track));
 
                     AudioTrackInfo info = new AudioTrackInfo(
@@ -202,7 +204,8 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                         false,
                         reference.identifier
                     );
-                    AmazonMusicAudioTrack audioTrack = new AmazonMusicAudioTrack(info, audioUrl, this);
+
+                    AmazonMusicAudioTrack audioTrack = new AmazonMusicAudioTrack(info, audioUrl, isrc, artworkUrl, this);
                     audioTrack.setArtworkUrl(artworkUrl);
                     tracks.add(audioTrack);
                 }
@@ -228,7 +231,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                         false,
                         reference.identifier
                     );
-                    tracks.add(new AmazonMusicAudioTrack(info, audioUrl, this));
+                    tracks.add(new AmazonMusicAudioTrack(info, audioUrl, null, null, this));
                 }
                 if (tracks.isEmpty()) return null;
                 return new BasicAudioPlaylist(playlistJson.title != null ? playlistJson.title : "Amazon Music Playlist", tracks, null, false);
@@ -252,7 +255,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                         false,
                         reference.identifier
                     );
-                    tracks.add(new AmazonMusicAudioTrack(info, audioUrl, this));
+                    tracks.add(new AmazonMusicAudioTrack(info, audioUrl, null, null, this));
                 }
                 if (tracks.isEmpty()) return null;
                 return new BasicAudioPlaylist(artistJson.name != null ? artistJson.name : "Amazon Music Artist", tracks, null, false);
@@ -336,7 +339,11 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                 false,
                 t.audioUrl
             );
-            tracks.add(new AmazonMusicAudioTrack(info, t.audioUrl, this));
+            // Fetch ISRC and artwork URL
+            String isrc = AmazonMusicParser.parseIsrc(trackToJson(t));
+            String artworkUrl = AmazonMusicParser.parseArtworkUrl(trackToJson(t));
+
+            tracks.add(new AmazonMusicAudioTrack(info, t.audioUrl, isrc, artworkUrl, this));
         }
         return tracks;
     }

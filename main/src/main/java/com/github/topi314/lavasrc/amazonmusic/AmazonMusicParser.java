@@ -14,8 +14,9 @@ public class AmazonMusicParser {
 	private static final Pattern NAME_PATTERN = Pattern.compile("\"name\"\\s*:\\s*\"(.*?)\"");
 	private static final Pattern AUDIO_URL_PATTERN = Pattern.compile("\"audioUrl\"\\s*:\\s*\"(.*?)\"");
 	// Regex pattern to extract the artwork URL
-	private static final Pattern ARTWORK_URL_PATTERN = Pattern.compile("\"artworkUrl\"\\s*:\\s*\"(.*?)\"");
+	private static final Pattern ARTWORK_URL_PATTERN = Pattern.compile("\"image\"\\s*:\\s*\"(.*?)\"");
 	private static final Pattern ARTIST_NAME_PATTERN = Pattern.compile("\"artist\"\\s*:\\s*\\{.*?\"name\"\\s*:\\s*\"(.*?)\"");
+	private static final Pattern ISRC_PATTERN = Pattern.compile("\"isrc\"\\s*:\\s*\"(.*?)\"");
 
 	/**
 	 * Parses a JSON string returned from Amazon Music and extracts the song title and artist.
@@ -109,6 +110,30 @@ public class AmazonMusicParser {
 	}
 
 	/**
+	 * Parses the ISRC from the JSON string.
+	 *
+	 * @param json the raw JSON response as a string
+	 * @return the ISRC or null if not found
+	 */
+	public static String parseIsrc(String json) {
+		if (json == null || json.isEmpty()) {
+			System.err.println("[AmazonMusicParser] [ERROR] JSON is null or empty.");
+			return null;
+		}
+
+		// Log the raw JSON input
+		System.out.println("[AmazonMusicParser] [DEBUG] Raw JSON for ISRC: " + json);
+
+		// Extract ISRC
+		String isrc = extractValue(ISRC_PATTERN, json);
+
+		// Log the extracted ISRC
+		System.out.println("[AmazonMusicParser] [DEBUG] Extracted ISRC: " + isrc);
+
+		return isrc;
+	}
+
+	/**
 	 * Parses the artwork URL from the JSON string.
 	 *
 	 * @param json the raw JSON response as a string
@@ -116,9 +141,20 @@ public class AmazonMusicParser {
 	 */
 	public static String parseArtworkUrl(String json) {
 		if (json == null || json.isEmpty()) {
+			System.err.println("[AmazonMusicParser] [ERROR] JSON is null or empty.");
 			return null;
 		}
-		return extractValue(ARTWORK_URL_PATTERN, json);
+
+		// Log the raw JSON input
+		System.out.println("[AmazonMusicParser] [DEBUG] Raw JSON for artworkUrl: " + json);
+
+		// Extract artwork URL
+		String artworkUrl = extractValue(ARTWORK_URL_PATTERN, json);
+
+		// Log the extracted artwork URL
+		System.out.println("[AmazonMusicParser] [DEBUG] Extracted artworkUrl: " + artworkUrl);
+
+		return artworkUrl;
 	}
 
 	/**

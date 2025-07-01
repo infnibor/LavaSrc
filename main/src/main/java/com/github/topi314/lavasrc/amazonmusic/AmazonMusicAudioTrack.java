@@ -13,15 +13,30 @@ import java.io.IOException;
 
 public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
     private final String audioUrl;
+    private final String isrc;
     private final AmazonMusicSourceManager sourceManager;
     private final HttpAudioSourceManager httpSourceManager;
     private String artworkUrl;
 
-    public AmazonMusicAudioTrack(AudioTrackInfo trackInfo, String audioUrl, AmazonMusicSourceManager sourceManager) {
+    public AmazonMusicAudioTrack(AudioTrackInfo trackInfo, String audioUrl, String isrc, String artworkUrl, AmazonMusicSourceManager sourceManager) {
         super(trackInfo);
         this.audioUrl = audioUrl;
+        this.isrc = isrc;
+        this.artworkUrl = artworkUrl;
         this.sourceManager = sourceManager;
         this.httpSourceManager = new HttpAudioSourceManager();
+    }
+
+    public String getIsrc() {
+        return isrc;
+    }
+
+    public String getArtworkUrl() {
+        return artworkUrl;
+    }
+
+    public void setArtworkUrl(String artworkUrl) {
+        this.artworkUrl = artworkUrl;
     }
 
     @Override
@@ -29,6 +44,8 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
         // Log the track information
         System.out.println("[AmazonMusicAudioTrack] [DEBUG] Track Info: " + trackInfo);
         System.out.println("[AmazonMusicAudioTrack] [DEBUG] Audio URL: " + audioUrl);
+        System.out.println("[AmazonMusicAudioTrack] [DEBUG] ISRC: " + isrc);
+        System.out.println("[AmazonMusicAudioTrack] [DEBUG] Artwork URL: " + artworkUrl);
 
         if (audioUrl == null || audioUrl.isEmpty()) {
             System.err.println("[AmazonMusicAudioTrack] [ERROR] Missing or invalid audioUrl for track: " + trackInfo.identifier);
@@ -43,15 +60,11 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
 
         System.out.println("[AmazonMusicAudioTrack] [INFO] Processing track with audioUrl: " + audioUrl);
 
-        // Extract proper title and author
-        String title = trackInfo.title.contains(" - ") ? trackInfo.title.split(" - ", 2)[1] : trackInfo.title;
-        String author = trackInfo.title.contains(" - ") ? trackInfo.title.split(" - ", 2)[0] : trackInfo.author;
-
         // Create an internal HTTP track and pass it to the delegate
         InternalAudioTrack httpTrack = new HttpAudioTrack(
                 new AudioTrackInfo(
-                        title,
-                        author,
+                        trackInfo.title,
+                        trackInfo.author,
                         trackInfo.length,
                         trackInfo.identifier,
                         trackInfo.isStream,
@@ -69,19 +82,14 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
 
     public static AmazonMusicAudioTrack decode(AudioTrackInfo trackInfo, DataInput input, AmazonMusicSourceManager sourceManager) throws IOException {
         String audioUrl = input.readUTF();
-        return new AmazonMusicAudioTrack(trackInfo, audioUrl, sourceManager);
+        // Placeholder values for ISRC and artworkUrl since they are not encoded
+        String isrc = "unknown";
+        String artworkUrl = "unknown";
+        return new AmazonMusicAudioTrack(trackInfo, audioUrl, isrc, artworkUrl, sourceManager);
     }
 
     @Override
     public AudioSourceManager getSourceManager() {
         return sourceManager;
-    }
-
-    public void setArtworkUrl(String artworkUrl) {
-        this.artworkUrl = artworkUrl;
-    }
-
-    public String getArtworkUrl() {
-        return artworkUrl;
     }
 }
