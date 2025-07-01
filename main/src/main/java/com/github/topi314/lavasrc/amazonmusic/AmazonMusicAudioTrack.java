@@ -37,14 +37,9 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
 
     @Override
     public void process(LocalAudioTrackExecutor executor) throws Exception {
-        // Log the track information
-        System.out.println("[AmazonMusicAudioTrack] [DEBUG] Track Info: " + trackInfo);
-        System.out.println("[AmazonMusicAudioTrack] [DEBUG] Audio URL: " + audioUrl);
-        System.out.println("[AmazonMusicAudioTrack] [DEBUG] ISRC: " + isrc);
-        System.out.println("[AmazonMusicAudioTrack] [DEBUG] Artwork URL: " + artworkUrl);
-
         if (audioUrl == null || audioUrl.isEmpty()) {
             System.err.println("[AmazonMusicAudioTrack] [ERROR] Missing or invalid audioUrl for track: " + trackInfo.identifier);
+            System.err.println("[AmazonMusicAudioTrack] [ERROR] Full trackInfo: " + trackInfo);
             throw new IllegalStateException("Missing or invalid audioUrl for Amazon Music track.");
         }
 
