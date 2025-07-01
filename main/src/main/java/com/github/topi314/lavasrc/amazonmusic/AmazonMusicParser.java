@@ -15,6 +15,7 @@ public class AmazonMusicParser {
 	private static final Pattern AUDIO_URL_PATTERN = Pattern.compile("\"audioUrl\"\\s*:\\s*\"(.*?)\"");
 	// Regex pattern to extract the artwork URL
 	private static final Pattern ARTWORK_URL_PATTERN = Pattern.compile("\"artworkUrl\"\\s*:\\s*\"(.*?)\"");
+	private static final Pattern ARTIST_NAME_PATTERN = Pattern.compile("\"artist\"\\s*:\\s*\\{.*?\"name\"\\s*:\\s*\"(.*?)\"");
 
 	/**
 	 * Parses a JSON string returned from Amazon Music and extracts the song title and artist.
@@ -42,7 +43,7 @@ public class AmazonMusicParser {
 		System.out.println("[AmazonMusicParser] [DEBUG] Raw JSON for title: " + json);
 
 		String name = extractValue(NAME_PATTERN, json);
-		String artist = extractValue(ARTIST_PATTERN, json);
+		String artist = extractValue(ARTIST_NAME_PATTERN, json); // Use the new pattern to extract artist name
 
 		// Log extracted values
 		System.out.println("[AmazonMusicParser] [DEBUG] Extracted name: " + name);
