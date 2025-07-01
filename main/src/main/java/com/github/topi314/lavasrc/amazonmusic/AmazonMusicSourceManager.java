@@ -326,10 +326,15 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
             if (!obj.endsWith("}")) obj = obj + "}";
             TrackJson t = new TrackJson();
             t.title = extractJsonString(obj, "title", "Unknown Title");
-            t.artist = extractJsonString(obj, "artist", "Unknown Artist");
+            // Try to extract artist from object or string (object first)
+            t.artist = extractArtistFlexible(obj, "Unknown Artist");
             t.duration = extractJsonLong(obj, "duration", 0L);
             t.audioUrl = extractJsonString(obj, "audioUrl", null);
             t.id = extractJsonString(obj, "id", null);
+            // Add parsing for asin, image, isrc
+            t.asin = extractJsonString(obj, "asin", null);
+            t.image = extractJsonString(obj, "image", null);
+            t.isrc = extractJsonString(obj, "isrc", null);
             if (t.audioUrl == null || !isSupportedAudioFormat(t.audioUrl)) continue;
             AudioTrackInfo info = new AudioTrackInfo(
                 t.title,
@@ -517,24 +522,17 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
             if (!obj.endsWith("}")) obj = obj + "}";
             TrackJson t = new TrackJson();
             t.title = extractJsonString(obj, "title", "Unknown Title");
-            t.artist = extractJsonString(obj, "artist", "Unknown Artist");
+            // Try to extract artist from object or string (object first)
+            t.artist = extractArtistFlexible(obj, "Unknown Artist");
             t.duration = extractJsonLong(obj, "duration", 0L);
             t.audioUrl = extractJsonString(obj, "audioUrl", null);
             t.id = extractJsonString(obj, "id", null);
+            t.asin = extractJsonString(obj, "asin", null);
+            t.image = extractJsonString(obj, "image", null);
+            t.isrc = extractJsonString(obj, "isrc", null);
             tracks.add(t);
         }
         return tracks.toArray(new TrackJson[0]);
-    }
-
-    private static class TrackJson {
-        String id;
-        String title;
-        String artist;
-        long duration;
-        String audioUrl;
-        String asin;
-        String image;
-        String isrc;
     }
 
     private TrackJson fetchTrackInfo(String trackId) throws IOException {
@@ -562,7 +560,8 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
         String json = content.toString();
         TrackJson result = new TrackJson();
         result.title = extractJsonString(json, "title", "Unknown Title");
-        result.artist = extractJsonString(json, "artist", "Unknown Artist");
+        // Try to extract artist from object or string (object first)
+        result.artist = extractArtistFlexible(json, "Unknown Artist");
         result.duration = extractJsonLong(json, "duration", 0L);
         result.audioUrl = extractJsonString(json, "audioUrl", null);
         result.id = extractJsonString(json, "id", null);
@@ -572,15 +571,12 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
         return result;
     }
 
-    private static String extractJsonString(String json, String key, String def) {
-        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\"" + Pattern.quote(key) + "\"\\s*:\\s*\"(.*?)\"").matcher(json);
-        return matcher.find() ? matcher.group(1) : def;
-    }
-
-    private static long extractJsonLong(String json, String key, long def) {
-        String regex = "\"" + Pattern.quote(key) + "\"\\s*:\\s*(\\d+)";
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile(regex).matcher(json);
-        return m.find() ? Long.parseLong(m.group(1)) : def;
+    // Extract artist from object ("artist":{"name":"..."}) or string ("artist":"..."), prefer object
+    private static String extractArtistFlexible(String json, String def) {
+        java.util.regex.Matcher objMatcher = java.util.regex.Pattern.compile("\"artist\"\\s*:\\s*\\{[^}]*\"name\"\\s*:\\s*\"(.*?)\"").matcher(json);
+        if (objMatcher.find()) return objMatcher.group(1);
+        java.util.regex.Matcher strMatcher = java.util.regex.Pattern.compile("\"artist\"\\s*:\\s*\"(.*?)\"").matcher(json);
+        return strMatcher.find() ? strMatcher.group(1) : def;
     }
 
     @Override
@@ -682,6 +678,15 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 		return matcher.find() ? matcher.group(1) : null;
 	}
 
+    private String extractJsonString(String json, String key, String def) {
+        String value = extractJsonString(json, key);
+        return value != null ? value : def;
+    }
+
+    private long extractJsonLong(String json, String key, long def) {
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\"" + Pattern.quote(key) + "\"\\s*:\\s*(\\d+)").matcher(json);
+        return matcher.find() ? Long.parseLong(matcher.group(1)) : def;
+    }
 
     // Helper to convert TrackJson to JSON string for parser (full data)
     private String trackToJson(TrackJson track) {
@@ -724,5 +729,17 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
     private String extractQueryParam(String url, String paramName) {
         Matcher matcher = Pattern.compile("[?&]" + Pattern.quote(paramName) + "=([^&]*)").matcher(url);
         return matcher.find() ? matcher.group(1) : null;
+    }
+
+    // Dodaj klasę TrackJson
+    private static class TrackJson {
+        String id;
+        String title;
+        String artist;
+        long duration;
+        String audioUrl;
+        String asin;
+        String image;
+        String isrc;
     }
 }
