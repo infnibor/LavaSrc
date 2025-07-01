@@ -43,9 +43,9 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
     public AudioItem loadItem(com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager manager, AudioReference reference) {
         Matcher matcher = AMAZON_MUSIC_URL_PATTERN.matcher(reference.identifier);
         if (!matcher.matches()) {
-            System.err.println("[AmazonMusic] [ERROR] Invalid URL format: " + reference.identifier);
             return null;
         }
+
         String type = matcher.group(1);
         String id = matcher.group(2);
 
