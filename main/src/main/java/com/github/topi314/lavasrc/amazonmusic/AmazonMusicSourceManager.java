@@ -63,8 +63,10 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                 if (podcastJson == null || podcastJson.tracks == null || podcastJson.tracks.length == 0) return null;
                 List<AudioTrack> tracks = new ArrayList<>();
                 for (TrackJson track : podcastJson.tracks) {
-                    String audioUrl = track.audioUrl != null ? track.audioUrl : fetchAudioUrlFromStreamUrls(track.id);
-                    if (audioUrl == null) {
+                    AudioUrlResult audioResult = track.audioUrl != null
+                        ? new AudioUrlResult(track.audioUrl, track.artworkUrl, track.isrc)
+                        : fetchAudioUrlFromStreamUrls(track.id);
+                    if (audioResult == null || audioResult.audioUrl == null) {
                         System.err.println("[AmazonMusicSourceManager] [ERROR] audioUrl is null for podcast track: " + track.id);
                         continue;
                     }
@@ -76,8 +78,8 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                         false,
                         reference.identifier
                     );
-                    System.out.println("[AmazonMusicSourceManager] [DEBUG] Creating AmazonMusicAudioTrack: " + info + ", audioUrl=" + audioUrl);
-                    tracks.add(new AmazonMusicAudioTrack(info, audioUrl, track.isrc, track.artworkUrl, this));
+                    System.out.println("[AmazonMusicSourceManager] [DEBUG] Creating AmazonMusicAudioTrack: " + info + ", audioUrl=" + audioResult.audioUrl);
+                    tracks.add(new AmazonMusicAudioTrack(info, audioResult.audioUrl, audioResult.isrc, audioResult.artworkUrl, this));
                 }
                 return new BasicAudioPlaylist(podcastJson.title != null ? podcastJson.title : "Podcast", tracks, null, false);
             }
@@ -86,8 +88,10 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
             if ("episode".equals(type)) {
                 TrackJson episodeJson = fetchEpisodeInfo(id);
                 if (episodeJson == null) return null;
-                String audioUrl = episodeJson.audioUrl != null ? episodeJson.audioUrl : fetchAudioUrlFromStreamUrls(episodeJson.id);
-                if (audioUrl == null) {
+                AudioUrlResult audioResult = episodeJson.audioUrl != null
+                    ? new AudioUrlResult(episodeJson.audioUrl, episodeJson.artworkUrl, episodeJson.isrc)
+                    : fetchAudioUrlFromStreamUrls(episodeJson.id);
+                if (audioResult == null || audioResult.audioUrl == null) {
                     System.err.println("[AmazonMusicSourceManager] [ERROR] audioUrl is null for episode: " + episodeJson.id);
                     return null;
                 }
@@ -99,8 +103,8 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                     false,
                     reference.identifier
                 );
-                System.out.println("[AmazonMusicSourceManager] [DEBUG] Creating AmazonMusicAudioTrack: " + info + ", audioUrl=" + audioUrl);
-                return new AmazonMusicAudioTrack(info, audioUrl, episodeJson.isrc, episodeJson.artworkUrl, this);
+                System.out.println("[AmazonMusicSourceManager] [DEBUG] Creating AmazonMusicAudioTrack: " + info + ", audioUrl=" + audioResult.audioUrl);
+                return new AmazonMusicAudioTrack(info, audioResult.audioUrl, audioResult.isrc, audioResult.artworkUrl, this);
             }
 
             // Handle song lyrics
@@ -143,13 +147,17 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                     return null;
                 }
                 if (foundTrack.audioUrl == null) {
-                    foundTrack.audioUrl = fetchAudioUrlFromStreamUrls(foundTrack.id != null ? foundTrack.id : trackAsin);
+                    AudioUrlResult audioResult = fetchAudioUrlFromStreamUrls(foundTrack.id != null ? foundTrack.id : trackAsin);
+                    if (audioResult != null) {
+                        foundTrack.audioUrl = audioResult.audioUrl;
+                        foundTrack.artworkUrl = audioResult.artworkUrl;
+                        foundTrack.isrc = audioResult.isrc;
+                    }
                 }
                 if (foundTrack.audioUrl == null) {
                     System.err.println("[AmazonMusicSourceManager] [ERROR] audioUrl is still null after stream_urls for track: " + foundTrack.id);
                     return null;
                 }
-                // artworkUrl i isrc są przekazywane bez nadpisywania pustym stringiem
                 AudioTrackInfo info = new AudioTrackInfo(
                     foundTrack.title,
                     foundTrack.artist,
@@ -165,13 +173,17 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                 TrackJson trackJson = fetchTrackInfo(trackId);
                 if (trackJson == null) return null;
                 if (trackJson.audioUrl == null) {
-                    trackJson.audioUrl = fetchAudioUrlFromStreamUrls(trackJson.id != null ? trackJson.id : trackId);
+                    AudioUrlResult audioResult = fetchAudioUrlFromStreamUrls(trackJson.id != null ? trackJson.id : trackId);
+                    if (audioResult != null) {
+                        trackJson.audioUrl = audioResult.audioUrl;
+                        trackJson.artworkUrl = audioResult.artworkUrl;
+                        trackJson.isrc = audioResult.isrc;
+                    }
                 }
                 if (trackJson.audioUrl == null) {
                     System.err.println("[AmazonMusicSourceManager] [ERROR] audioUrl is null for track: " + trackJson.id);
                     return null;
                 }
-                // artworkUrl i isrc są przekazywane bez nadpisywania pustym stringiem
                 AudioTrackInfo info = new AudioTrackInfo(
                     trackJson.title,
                     trackJson.artist,
@@ -189,14 +201,20 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                 List<AudioTrack> tracks = new java.util.ArrayList<>();
                 for (TrackJson track : albumJson.tracks) {
                     String audioUrl = track.audioUrl;
+                    String artworkUrl = track.artworkUrl;
+                    String isrc = track.isrc;
                     if (audioUrl == null) {
-                        audioUrl = fetchAudioUrlFromStreamUrls(track.id);
+                        AudioUrlResult audioResult = fetchAudioUrlFromStreamUrls(track.id);
+                        if (audioResult != null) {
+                            audioUrl = audioResult.audioUrl;
+                            artworkUrl = audioResult.artworkUrl;
+                            isrc = audioResult.isrc;
+                        }
                     }
                     if (audioUrl == null) {
                         System.err.println("[AmazonMusicSourceManager] [ERROR] audioUrl is null for album track: " + track.id);
                         continue;
                     }
-                    // artworkUrl i isrc są przekazywane bez nadpisywania pustym stringiem
                     AudioTrackInfo info = new AudioTrackInfo(
                         track.title,
                         track.artist,
@@ -206,7 +224,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                         reference.identifier
                     );
                     System.out.println("[AmazonMusicSourceManager] [DEBUG] Creating AmazonMusicAudioTrack: " + info + ", audioUrl=" + audioUrl);
-                    AmazonMusicAudioTrack audioTrack = new AmazonMusicAudioTrack(info, audioUrl, track.isrc, track.artworkUrl, this);
+                    AmazonMusicAudioTrack audioTrack = new AmazonMusicAudioTrack(info, audioUrl, isrc, artworkUrl, this);
                     tracks.add(audioTrack);
                 }
                 if (tracks.isEmpty()) return null;
@@ -217,14 +235,20 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                 List<AudioTrack> tracks = new java.util.ArrayList<>();
                 for (TrackJson track : playlistJson.tracks) {
                     String audioUrl = track.audioUrl;
+                    String artworkUrl = track.artworkUrl;
+                    String isrc = track.isrc;
                     if (audioUrl == null) {
-                        audioUrl = fetchAudioUrlFromStreamUrls(track.id);
+                        AudioUrlResult audioResult = fetchAudioUrlFromStreamUrls(track.id);
+                        if (audioResult != null) {
+                            audioUrl = audioResult.audioUrl;
+                            artworkUrl = audioResult.artworkUrl;
+                            isrc = audioResult.isrc;
+                        }
                     }
                     if (audioUrl == null) {
                         System.err.println("[AmazonMusicSourceManager] [ERROR] audioUrl is null for playlist track: " + track.id);
                         continue;
                     }
-                    // artworkUrl i isrc są przekazywane bez nadpisywania pustym stringiem
                     AudioTrackInfo info = new AudioTrackInfo(
                         track.title,
                         track.artist,
@@ -234,7 +258,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                         reference.identifier
                     );
                     System.out.println("[AmazonMusicSourceManager] [DEBUG] Creating AmazonMusicAudioTrack: " + info + ", audioUrl=" + audioUrl);
-                    tracks.add(new AmazonMusicAudioTrack(info, audioUrl, track.isrc, track.artworkUrl, this));
+                    tracks.add(new AmazonMusicAudioTrack(info, audioUrl, isrc, artworkUrl, this));
                 }
                 if (tracks.isEmpty()) return null;
                 return new BasicAudioPlaylist(playlistJson.title != null ? playlistJson.title : "Amazon Music Playlist", tracks, null, false);
@@ -244,14 +268,20 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                 List<AudioTrack> tracks = new ArrayList<>();
                 for (TrackJson track : artistJson.tracks) {
                     String audioUrl = track.audioUrl;
+                    String artworkUrl = track.artworkUrl;
+                    String isrc = track.isrc;
                     if (audioUrl == null) {
-                        audioUrl = fetchAudioUrlFromStreamUrls(track.id);
+                        AudioUrlResult audioResult = fetchAudioUrlFromStreamUrls(track.id);
+                        if (audioResult != null) {
+                            audioUrl = audioResult.audioUrl;
+                            artworkUrl = audioResult.artworkUrl;
+                            isrc = audioResult.isrc;
+                        }
                     }
                     if (audioUrl == null) {
                         System.err.println("[AmazonMusicSourceManager] [ERROR] audioUrl is null for artist track: " + track.id);
                         continue;
                     }
-                    // artworkUrl i isrc są przekazywane bez nadpisywania pustym stringiem
                     AudioTrackInfo info = new AudioTrackInfo(
                         track.title,
                         track.artist,
@@ -261,7 +291,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                         reference.identifier
                     );
                     System.out.println("[AmazonMusicSourceManager] [DEBUG] Creating AmazonMusicAudioTrack: " + info + ", audioUrl=" + audioUrl);
-                    tracks.add(new AmazonMusicAudioTrack(info, audioUrl, track.isrc, track.artworkUrl, this));
+                    tracks.add(new AmazonMusicAudioTrack(info, audioUrl, isrc, artworkUrl, this));
                 }
                 if (tracks.isEmpty()) return null;
                 return new BasicAudioPlaylist(artistJson.name != null ? artistJson.name : "Amazon Music Artist", tracks, null, false);
@@ -607,9 +637,9 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
     }
 
 	/**
-	 * Fetches audioUrl from /stream_urls?id={track_id} endpoint.
+	 * Fetches audioUrl, artworkUrl i isrc z /stream_urls?id={track_id}.
 	 */
-	private String fetchAudioUrlFromStreamUrls(String trackId) throws IOException {
+	private AudioUrlResult fetchAudioUrlFromStreamUrls(String trackId) throws IOException {
 		if (trackId == null) {
 			System.err.println("[AmazonMusic] [ERROR] Track ID is null.");
 			return null;
@@ -649,6 +679,8 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 
 		// 1. Szukaj klasycznego audioUrl
 		String audioUrl = null;
+		String artworkUrl = null;
+		String isrc = null;
 		java.util.regex.Matcher urlsMatcher = java.util.regex.Pattern.compile("\"urls\"\\s*:\\s*\\{(.*?)\\}").matcher(json);
 		if (urlsMatcher.find()) {
 			String urlsContent = urlsMatcher.group(1);
@@ -659,62 +691,70 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 		if (audioUrl == null) {
 			audioUrl = extractJsonString(json, "audioUrl");
 		}
-		// 2. Szukaj bezpośredniego linku do pliku mp3/flac/opus
-		if (audioUrl != null && isSupportedAudioFormat(audioUrl)) {
-			System.out.println("[AmazonMusic] [DEBUG] Final audioUrl: " + audioUrl);
-			return audioUrl;
-		}
+		// 2. Szukaj bezpośredniego linku do pliku mp3/flac/opus oraz artworkUrl i isrc z data[]
+		if ((audioUrl == null || !isSupportedAudioFormat(audioUrl))) {
+			String bestUrl = null;
+			String bestArtwork = null;
+			String bestIsrc = null;
+			String bestMime = null;
+			int bestQuality = -1;
+			java.util.regex.Matcher dataArrayMatcher = java.util.regex.Pattern.compile("\"data\"\\s*:\\s*\\[(.*?)\\](?!\\s*,)").matcher(json);
+			if (dataArrayMatcher.find()) {
+				String dataArray = dataArrayMatcher.group(1);
+				java.util.regex.Matcher entryMatcher = java.util.regex.Pattern.compile("\\{(.*?)\\}(,|$)").matcher(dataArray);
+				while (entryMatcher.find()) {
+					String entry = entryMatcher.group(1);
 
-		// 3. Szukaj base_url z tablicy data[] dla najlepszego formatu
-		// Preferuj: mp3 > opus > flac > audio/mp4
-		String bestUrl = null;
-		String bestMime = null;
-		int bestQuality = -1;
-		java.util.regex.Matcher dataArrayMatcher = java.util.regex.Pattern.compile("\"data\"\\s*:\\s*\\[(.*?)\\](?!\\s*,)").matcher(json);
-		if (dataArrayMatcher.find()) {
-			String dataArray = dataArrayMatcher.group(1);
-			java.util.regex.Matcher entryMatcher = java.util.regex.Pattern.compile("\\{(.*?)\\}(,|$)").matcher(dataArray);
-			while (entryMatcher.find()) {
-				String entry = entryMatcher.group(1);
+					String mimeType = extractJsonString(entry, "mime_type");
+					String baseUrl = extractJsonString(entry, "base_url");
+					String codecs = extractJsonString(entry, "codecs");
+					String entryArtwork = extractJsonString(entry, "image");
+					String entryIsrc = extractJsonString(entry, "isrc");
+					int qualityRanking = -1;
+					try {
+						java.util.regex.Matcher qMatcher = java.util.regex.Pattern.compile("\"quality_ranking\"\\s*:\\s*(\\d+)").matcher(entry);
+						if (qMatcher.find()) qualityRanking = Integer.parseInt(qMatcher.group(1));
+					} catch (Exception ignore) {}
 
-				String mimeType = extractJsonString(entry, "mime_type");
-				String baseUrl = extractJsonString(entry, "base_url");
-				String codecs = extractJsonString(entry, "codecs");
-				int qualityRanking = -1;
-				try {
-					java.util.regex.Matcher qMatcher = java.util.regex.Pattern.compile("\"quality_ranking\"\\s*:\\s*(\\d+)").matcher(entry);
-					if (qMatcher.find()) qualityRanking = Integer.parseInt(qMatcher.group(1));
-				} catch (Exception ignore) {}
+					// Preferencje: mp3 > opus > flac > audio/mp4
+					int score = 0;
+					if (mimeType != null && mimeType.contains("mp3")) score = 100;
+					else if (codecs != null && codecs.contains("opus")) score = 90;
+					else if (codecs != null && codecs.contains("flac")) score = 80;
+					else if (mimeType != null && mimeType.contains("audio/mp4")) score = 70;
+					else score = 10;
 
-				// Preferencje: mp3 > opus > flac > audio/mp4
-				int score = 0;
-				if (mimeType != null && mimeType.contains("mp3")) score = 100;
-				else if (codecs != null && codecs.contains("opus")) score = 90;
-				else if (codecs != null && codecs.contains("flac")) score = 80;
-				else if (mimeType != null && mimeType.contains("audio/mp4")) score = 70;
-				else score = 10;
-
-				// Im wyższy qualityRanking, tym lepiej (jeśli score równe)
-				if (baseUrl != null && score > bestQuality) {
-					bestUrl = baseUrl;
-					bestMime = mimeType;
-					bestQuality = score;
-				} else if (baseUrl != null && score == bestQuality && qualityRanking > 0) {
-					bestUrl = baseUrl;
-					bestMime = mimeType;
-					bestQuality = score;
+					// Im wyższy qualityRanking, tym lepiej (jeśli score równe)
+					if (baseUrl != null && score > bestQuality) {
+						bestUrl = baseUrl;
+						bestArtwork = entryArtwork;
+						bestIsrc = entryIsrc;
+						bestMime = mimeType;
+						bestQuality = score;
+					} else if (baseUrl != null && score == bestQuality && qualityRanking > 0) {
+						bestUrl = baseUrl;
+						bestArtwork = entryArtwork;
+						bestIsrc = entryIsrc;
+						bestMime = mimeType;
+						bestQuality = score;
+					}
 				}
+			}
+			if (bestUrl != null) {
+				System.out.println("[AmazonMusic] [DEBUG] Final base_url: " + bestUrl + " (mime_type: " + bestMime + ")");
+				audioUrl = bestUrl;
+				artworkUrl = bestArtwork;
+				isrc = bestIsrc;
 			}
 		}
 
-		if (bestUrl != null) {
-			System.out.println("[AmazonMusic] [DEBUG] Final base_url: " + bestUrl + " (mime_type: " + bestMime + ")");
-			return bestUrl;
+		// Log error jeśli nadal nie znaleziono
+		if (audioUrl == null) {
+			System.err.println("[AmazonMusic] [ERROR] audioUrl is still null after processing stream_urls for track: " + trackId);
+			return null;
 		}
 
-		// Log error jeśli nadal nie znaleziono
-		System.err.println("[AmazonMusic] [ERROR] audioUrl is still null after processing stream_urls for track: " + trackId);
-		return null;
+		return new AudioUrlResult(audioUrl, artworkUrl, isrc);
 	}
 
 	/**
@@ -776,5 +816,17 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
         String asin;
         String artworkUrl;
         String isrc;
+    }
+
+    // Klasa pomocnicza do zwracania audioUrl, artworkUrl i isrc
+    private static class AudioUrlResult {
+        public final String audioUrl;
+        public final String artworkUrl;
+        public final String isrc;
+        public AudioUrlResult(String audioUrl, String artworkUrl, String isrc) {
+            this.audioUrl = audioUrl;
+            this.artworkUrl = artworkUrl;
+            this.isrc = isrc;
+        }
     }
 }

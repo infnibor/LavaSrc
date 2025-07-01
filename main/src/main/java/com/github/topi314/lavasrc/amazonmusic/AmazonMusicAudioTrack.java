@@ -6,6 +6,8 @@ import com.sedmelluq.discord.lavaplayer.track.playback.LocalAudioTrackExecutor;
 import com.sedmelluq.discord.lavaplayer.source.http.HttpAudioTrack;
 import com.sedmelluq.discord.lavaplayer.source.http.HttpAudioSourceManager;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
+import com.sedmelluq.discord.lavaplayer.container.MediaContainerRegistry;
+import com.sedmelluq.discord.lavaplayer.container.MediaContainerDescriptor;
 
 import java.io.DataOutput;
 import java.io.DataInput;
@@ -45,7 +47,8 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
 
         System.out.println("[AmazonMusicAudioTrack] [INFO] Processing track with audioUrl: " + audioUrl);
 
-        // Create an internal HTTP track and pass it to the delegate
+        MediaContainerDescriptor descriptor = null;
+
         InternalAudioTrack httpTrack = new HttpAudioTrack(
                 new AudioTrackInfo(
                         trackInfo.title,
@@ -55,7 +58,7 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
                         trackInfo.isStream,
                         audioUrl
                 ),
-                null,
+                descriptor,
                 httpSourceManager
         );
         processDelegate(httpTrack, executor);
