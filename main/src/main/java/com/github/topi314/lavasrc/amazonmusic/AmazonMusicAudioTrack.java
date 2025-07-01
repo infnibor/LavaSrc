@@ -30,15 +30,18 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
             System.err.println("[AmazonMusicAudioTrack] [ERROR] Missing audioUrl for track: " + trackInfo.identifier);
             throw new IllegalStateException("Missing audioUrl for Amazon Music track.");
         }
+
+        // Check if audioUrl has a supported format
         if (!audioUrl.matches("(?i).+\\.(mp3|m4a|flac|ogg|wav)(\\?.*)?$")) {
             System.err.println("[AmazonMusicAudioTrack] [ERROR] Unsupported file format for audioUrl: " + audioUrl);
-            throw new FriendlyException("Unknown file format for Amazon Music track: " + audioUrl, FriendlyException.Severity.COMMON, null);
+            throw new FriendlyException("Unsupported file format for Amazon Music track: " + audioUrl, FriendlyException.Severity.COMMON, null);
         }
 
+        // Create an internal HTTP track and pass it to the delegate
         InternalAudioTrack httpTrack = new HttpAudioTrack(
                 new AudioTrackInfo(
-                        trackInfo.title,
-                        trackInfo.author,
+                        trackInfo.title != null ? trackInfo.title : "Unknown Title",
+                        trackInfo.author != null ? trackInfo.author : "Unknown Artist",
                         trackInfo.length,
                         trackInfo.identifier,
                         trackInfo.isStream,

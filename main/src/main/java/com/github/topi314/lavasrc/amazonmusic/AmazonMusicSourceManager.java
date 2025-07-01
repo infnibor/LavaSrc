@@ -20,7 +20,7 @@ import java.io.InputStream;
 
 public class AmazonMusicSourceManager implements AudioSourceManager {
     private static final String AMAZON_MUSIC_URL_REGEX =
-        "https?:\\/\\/music\\.amazon\\.[a-z.]+\\/(tracks|albums|playlists|artists)\\/([A-Za-z0-9]+)";
+        "https?:\\/\\/music\\.amazon\\.[a-z\\.]+\\/(tracks|albums|playlists|artists|podcast|episode|lyrics)\\/([A-Za-z0-9]+)";
     private static final Pattern AMAZON_MUSIC_URL_PATTERN = Pattern.compile(AMAZON_MUSIC_URL_REGEX);
 
     private final String apiUrl;
@@ -41,7 +41,9 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
     }
 
     public AudioItem loadItem(com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager manager, AudioReference reference) {
-        Matcher matcher = AMAZON_MUSIC_URL_PATTERN.matcher(reference.identifier);
+        // Remove additional parameters from the URL, leaving only the base link
+        String cleanedIdentifier = reference.identifier.split("\\?")[0];
+        Matcher matcher = AMAZON_MUSIC_URL_PATTERN.matcher(cleanedIdentifier);
         if (!matcher.matches()) {
             return null;
         }
@@ -51,11 +53,72 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 
         id = id.split("[^a-zA-Z0-9]", 2)[0];
 
+        // Added declaration of the trackAsin variable
         String trackAsin = reference.identifier.contains("?") ? extractQueryParam(reference.identifier, "trackAsin") : null;
 
-        String queryParams = reference.identifier.contains("?") ? reference.identifier.split("\\?", 2)[1] : null;
-
         try {
+            // Handle podcasts
+            if ("podcast".equals(type)) {
+                AlbumJson podcastJson = fetchPodcastInfo(id);
+                if (podcastJson == null || podcastJson.tracks == null || podcastJson.tracks.length == 0) return null;
+                List<AudioTrack> tracks = new ArrayList<>();
+                for (TrackJson track : podcastJson.tracks) {
+                    String audioUrl = track.audioUrl != null ? track.audioUrl : fetchAudioUrlFromStreamUrls(track.id);
+                    if (audioUrl == null) continue;
+                    AudioTrackInfo info = new AudioTrackInfo(
+                        track.title,
+                        track.artist,
+                        track.duration,
+                        track.id != null ? track.id : "",
+                        false,
+                        reference.identifier
+                    );
+                    tracks.add(new AmazonMusicAudioTrack(info, audioUrl, this));
+                }
+                return new BasicAudioPlaylist(podcastJson.title != null ? podcastJson.title : "Podcast", tracks, null, false);
+            }
+
+            // Handle episodes
+            if ("episode".equals(type)) {
+                TrackJson episodeJson = fetchEpisodeInfo(id);
+                if (episodeJson == null) return null;
+                String audioUrl = episodeJson.audioUrl != null ? episodeJson.audioUrl : fetchAudioUrlFromStreamUrls(episodeJson.id);
+                if (audioUrl == null) return null;
+                AudioTrackInfo info = new AudioTrackInfo(
+                    episodeJson.title,
+                    episodeJson.artist,
+                    episodeJson.duration,
+                    episodeJson.id != null ? episodeJson.id : "",
+                    false,
+                    reference.identifier
+                );
+                return new AmazonMusicAudioTrack(info, audioUrl, this);
+            }
+
+            // Handle song lyrics
+            if ("lyrics".equals(type)) {
+                String lyrics = fetchLyrics(id);
+                if (lyrics == null) {
+                    System.err.println("[AmazonMusic] [ERROR] No lyrics found for track: " + id);
+                    return null;
+                }
+                System.out.println("Lyrics for track " + id + ":");
+                System.out.println(lyrics);
+                return null; // Lyrics are not playable
+            }
+
+            // Handle account information
+            if ("account".equals(type)) {
+                String accountInfo = fetchAccountInfo();
+                if (accountInfo == null) {
+                    System.err.println("[AmazonMusic] [ERROR] Failed to fetch account information.");
+                    return null;
+                }
+                System.out.println("Account Information:");
+                System.out.println(accountInfo);
+                return null; // Account information is not playable
+            }
+
             // Handle album with trackAsin (single track from album)
             if ("albums".equals(type) && trackAsin != null) {
                 AlbumJson albumJson = fetchAlbumInfo(id);
@@ -173,7 +236,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
             } else if ("artists".equals(type)) {
                 ArtistJson artistJson = fetchArtistInfo(id);
                 if (artistJson == null || artistJson.tracks == null || artistJson.tracks.length == 0) return null;
-                List<AudioTrack> tracks = new java.util.ArrayList<>();
+                List<AudioTrack> tracks = new ArrayList<>();
                 for (TrackJson track : artistJson.tracks) {
                     String audioUrl = track.audioUrl;
                     // If audioUrl is null, fetch from /stream_urls endpoint
@@ -312,6 +375,84 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
         return fetchTracksContainer(url, ArtistJson.class);
     }
 
+    /**
+     * Fetches community playlist information.
+     */
+    private PlaylistJson fetchCommunityPlaylistInfo(String playlistId) throws IOException {
+        String url = apiUrl.endsWith("/") ? apiUrl + "community_playlist?id=" + playlistId : apiUrl + "/community_playlist?id=" + playlistId;
+        return fetchTracksContainer(url, PlaylistJson.class);
+    }
+
+    /**
+     * Fetches episode information.
+     */
+    private TrackJson fetchEpisodeInfo(String episodeId) throws IOException {
+        String url = apiUrl.endsWith("/") ? apiUrl + "episode?id=" + episodeId : apiUrl + "/episode?id=" + episodeId;
+        return fetchTracksContainer(url, TrackJson.class);
+    }
+
+    /**
+     * Fetches podcast information.
+     */
+    private AlbumJson fetchPodcastInfo(String podcastId) throws IOException {
+        String url = apiUrl.endsWith("/") ? apiUrl + "podcast?id=" + podcastId : apiUrl + "/podcast?id=" + podcastId;
+        return fetchTracksContainer(url, AlbumJson.class);
+    }
+
+    /**
+     * Fetches lyrics for a track.
+     */
+    private String fetchLyrics(String trackId) throws IOException {
+        String url = apiUrl.endsWith("/") ? apiUrl + "lyrics?id=" + trackId : apiUrl + "/lyrics?id=" + trackId;
+        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+        conn.setRequestMethod("GET");
+        conn.setConnectTimeout(10000);
+        conn.setReadTimeout(10000);
+        if (apiKey != null && !apiKey.isEmpty()) {
+            conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+        }
+        int status = conn.getResponseCode();
+        if (status != 200) {
+            return null;
+        }
+        BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+        StringBuilder content = new StringBuilder();
+        String line;
+        while ((line = in.readLine()) != null) {
+            content.append(line);
+        }
+        in.close();
+        conn.disconnect();
+        return content.toString();
+    }
+
+    /**
+     * Fetches account information.
+     */
+    private String fetchAccountInfo() throws IOException {
+        String url = apiUrl.endsWith("/") ? apiUrl + "account" : apiUrl + "/account";
+        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+        conn.setRequestMethod("GET");
+        conn.setConnectTimeout(10000);
+        conn.setReadTimeout(10000);
+        if (apiKey != null && !apiKey.isEmpty()) {
+            conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+        }
+        int status = conn.getResponseCode();
+        if (status != 200) {
+            return null;
+        }
+        BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+        StringBuilder content = new StringBuilder();
+        String line;
+        while ((line = in.readLine()) != null) {
+            content.append(line);
+        }
+        in.close();
+        conn.disconnect();
+        return content.toString();
+    }
+
     private <T> T fetchTracksContainer(String url, Class<T> clazz) throws IOException {
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setRequestMethod("GET");
@@ -423,7 +564,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
     }
 
     private static long extractJsonLong(String json, String key, long def) {
-        String regex = "\"" + key + "\"\\s*:\\s*(\\d+)";
+        String regex = "\"" + Pattern.quote(key) + "\"\\s*:\\s*(\\d+)";
         java.util.regex.Matcher m = java.util.regex.Pattern.compile(regex).matcher(json);
         return m.find() ? Long.parseLong(m.group(1)) : def;
     }
@@ -516,7 +657,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 	 * Extracts a JSON string value for a given key using regex (no JSON parser used).
 	 */
 	private String extractJsonString(String json, String key) {
-		java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\"" + key + "\"\\s*:\\s*\"(.*?)\"").matcher(json);
+		java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\"" + Pattern.quote(key) + "\"\\s*:\\s*\"(.*?)\"").matcher(json);
 		return matcher.find() ? matcher.group(1) : null;
 	}
 
@@ -557,7 +698,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 	 * @return The value of the parameter, or null if not found.
 	 */
     private String extractQueryParam(String url, String paramName) {
-        Matcher matcher = Pattern.compile("[?&]" + paramName + "=([^&]*)").matcher(url);
+        Matcher matcher = Pattern.compile("[?&]" + Pattern.quote(paramName) + "=([^&]*)").matcher(url);
         return matcher.find() ? matcher.group(1) : null;
     }
 }
