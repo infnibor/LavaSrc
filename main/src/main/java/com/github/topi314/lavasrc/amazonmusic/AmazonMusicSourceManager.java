@@ -567,7 +567,8 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
     }
 
     private static String extractJsonString(String json, String key, String def) {
-        return AmazonMusicParser.parseAmazonTitle(json);
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\"" + Pattern.quote(key) + "\"\\s*:\\s*\"(.*?)\"").matcher(json);
+        return matcher.find() ? matcher.group(1) : def;
     }
 
     private static long extractJsonLong(String json, String key, long def) {
