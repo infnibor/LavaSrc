@@ -12,6 +12,10 @@ import com.sedmelluq.discord.lavaplayer.container.MediaContainerDescriptor;
 import java.io.DataOutput;
 import java.io.DataInput;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.net.URL;
 
 public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
     private final String audioUrl;
@@ -49,19 +53,63 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
 
         MediaContainerDescriptor descriptor = null;
 
-        InternalAudioTrack httpTrack = new HttpAudioTrack(
-                new AudioTrackInfo(
+        String lowerUrl = audioUrl.toLowerCase();
+        if (lowerUrl.endsWith(".mp4") || lowerUrl.endsWith(".m4a")) {
+            Path tempInput = Files.createTempFile("amzn_input_", lowerUrl.endsWith(".mp4") ? ".mp4" : ".m4a");
+            try (java.io.InputStream in = new URL(audioUrl).openStream()) {
+                Files.copy(in, tempInput, StandardCopyOption.REPLACE_EXISTING);
+            }
+            Path tempMp3 = Files.createTempFile("amzn_output_", ".mp3");
+            try {
+                ProcessBuilder pb = new ProcessBuilder(
+                    "ffmpeg", "-y", "-i", tempInput.toAbsolutePath().toString(),
+                    "-vn", "-acodec", "libmp3lame", "-ar", "44100", "-ac", "2", "-ab", "192k",
+                    tempMp3.toAbsolutePath().toString()
+                );
+                pb.redirectErrorStream(true);
+                Process proc = pb.start();
+                try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(proc.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                    }
+                }
+                int exitCode = proc.waitFor();
+                if (exitCode != 0) {
+                    throw new RuntimeException("FFmpeg conversion failed with exit code " + exitCode);
+                }
+                // Odtwarzaj plik mp3 lokalnie
+                InternalAudioTrack httpTrack = new HttpAudioTrack(
+                    new AudioTrackInfo(
                         trackInfo.title,
                         trackInfo.author,
                         trackInfo.length,
                         trackInfo.identifier,
                         trackInfo.isStream,
-                        audioUrl
+                        tempMp3.toUri().toString()
+                    ),
+                    descriptor,
+                    httpSourceManager
+                );
+                processDelegate(httpTrack, executor);
+            } finally {
+                try { Files.deleteIfExists(tempInput); } catch (Exception ignore) {}
+                try { Files.deleteIfExists(tempMp3); } catch (Exception ignore) {}
+            }
+        } else {
+            InternalAudioTrack httpTrack = new HttpAudioTrack(
+                new AudioTrackInfo(
+                    trackInfo.title,
+                    trackInfo.author,
+                    trackInfo.length,
+                    trackInfo.identifier,
+                    trackInfo.isStream,
+                    audioUrl
                 ),
                 descriptor,
                 httpSourceManager
-        );
-        processDelegate(httpTrack, executor);
+            );
+            processDelegate(httpTrack, executor);
+        }
     }
 
     public void encode(DataOutput output) throws IOException {
