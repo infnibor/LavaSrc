@@ -17,6 +17,7 @@ plugins:
       tidal: false # Enable Tidal source
       qobuz: false # Enabled qobuz source
       ytdlp: false # Enable yt-dlp source
+      lastfm: false # Enable Last.fm source
     lyrics-sources:
       spotify: false # Enable Spotify lyrics source
       deezer: false # Enable Deezer lyrics source
@@ -83,6 +84,9 @@ plugins:
       searchLimit: 10 # How many search results should be returned
 #      customLoadArgs: ["-q", "--no-warnings", "--flat-playlist", "--skip-download", "-J"] # Custom arguments to pass to yt-dlp
 #      customPlaybackArgs: ["-q", "--no-warnings", "-f", "bestaudio", "-J"] # Custom arguments for yt-dlp
+    lastfm:
+      apiKey: "your api key" # Required - get this from https://www.last.fm/api/account/create
+      playlistLoadLimit: 6 # Optional - number of pages to load for playlists
 
 server: # REST and WS server
   port: 2333

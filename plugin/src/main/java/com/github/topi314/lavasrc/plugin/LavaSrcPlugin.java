@@ -8,7 +8,7 @@ import com.github.topi314.lavasrc.applemusic.AppleMusicSourceManager;
 import com.github.topi314.lavasrc.deezer.DeezerAudioSourceManager;
 import com.github.topi314.lavasrc.deezer.DeezerAudioTrack;
 import com.github.topi314.lavasrc.flowerytts.FloweryTTSSourceManager;
-import com.github.topi314.lavasrc.lastfm.LastfmSourceManager;
+import com.github.topi314.lavasrc.lastfm.LastfmAudioSourceManager;
 import com.github.topi314.lavasrc.mirror.DefaultMirroringAudioTrackResolver;
 import com.github.topi314.lavasrc.plugin.config.*;
 import com.github.topi314.lavasrc.protocol.Config;
@@ -48,7 +48,7 @@ public class LavaSrcPlugin implements AudioPlayerManagerConfiguration, SearchMan
 	private TidalSourceManager tidal;
 	private QobuzAudioSourceManager qobuz;
 	private YtdlpAudioSourceManager ytdlp;
-	private LastfmSourceManager lastfm;
+	private LastfmAudioSourceManager lastfm;
 
 	public LavaSrcPlugin(
 		LavaSrcConfig pluginConfig,
@@ -158,7 +158,7 @@ public class LavaSrcPlugin implements AudioPlayerManagerConfiguration, SearchMan
 		}
 		try {
 			if (lastfmConfig != null && sourcesConfig instanceof SourcesConfigExtended && ((SourcesConfigExtended) sourcesConfig).isLastfm()) {
-				this.lastfm = new LastfmSourceManager(lastfmConfig.getApiKey(), pluginConfig.getProviders(), unused -> manager);
+				this.lastfm = new LastfmAudioSourceManager(lastfmConfig.getApiKey(), pluginConfig.getProviders(), unused -> manager);
 			}
 		} catch (Exception e) {
 			log.warn("Last.fm configuration not available, skipping Last.fm source manager initialization");

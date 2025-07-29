@@ -18,19 +18,19 @@
 
 # Sources
 
-| Source                                              | Features       | Playback                     | Credits                                                                                                                |
-|-----------------------------------------------------|----------------|------------------------------|------------------------------------------------------------------------------------------------------------------------|
+| Source                                              | Features       | Playback                    | Credits                                                                                                                |
+|-----------------------------------------------------|----------------|-----------------------------|------------------------------------------------------------------------------------------------------------------------|
 | Spotify                                             | 📁💿🎵🧑🔍🔬📜 | [Mirror](#what-is-mirroring) | [@topi314](https://github.com/topi314)                                                                                 |
 | Apple Music                                         | 📁💿🎵🧑🔍🔬📜 | [Mirror](#what-is-mirroring) | [@ryan5453](https://github.com/ryan5453)                                                                               |
-| Deezer                                              | 📁💿🎵🧑🔍🔬📜 | Direct                       | [@topi314](https://github.com/topi314), [@ryan5453](https://github.com/ryan5453), [@viztea](https://github.com/viztea) |
-| Yandex                                              | 📁💿🎵🧑🔍🔬📜 | Direct                       | [@agutinvboy](https://github.com/agutinvboy)                                                                           |
-| Flowery TTS                                         |                | Direct                       | [@bachtran02](https://github.com/bachtran02)                                                                           |
-| YouTube (Music)                                     | 🔬📜           | N/A                          | [@topi314](https://github.com/topi314), [@DRSchlaubi](https://github.com/DRSchlaubi)                                   |
-| VK Music                                            | 📁💿🎵🧑🔍🔬📜 | Direct                       | [@Krispeckt](https://github.com/Krispeckt)                                                                             |
+| Deezer                                              | 📁💿🎵🧑🔍🔬📜 | Direct                      | [@topi314](https://github.com/topi314), [@ryan5453](https://github.com/ryan5453), [@viztea](https://github.com/viztea) |
+| Yandex                                              | 📁💿🎵🧑🔍🔬📜 | Direct                      | [@agutinvboy](https://github.com/agutinvboy)                                                                           |
+| Flowery TTS                                         |                | Direct                      | [@bachtran02](https://github.com/bachtran02)                                                                           |
+| YouTube (Music)                                     | 🔬📜           | N/A                         | [@topi314](https://github.com/topi314), [@DRSchlaubi](https://github.com/DRSchlaubi)                                   |
+| VK Music                                            | 📁💿🎵🧑🔍🔬📜 | Direct                      | [@Krispeckt](https://github.com/Krispeckt)                                                                             |
 | Tidal                                               | 📁💿🎵🧑       | [Mirror](#what-is-mirroring) | [@nansess](https://github.com/nansess), [@InfNibor](https://github.com/InfNibor)                                       |
-| Qobuz                                               | 📁💿🎵🧑       | Direct                       | [@munishkhatri720](https://github.com/munishkhatri720)                                                                 |
-| YouTube([yt-dlp](https://github.com/yt-dlp/yt-dlp)) | 📁💿🎵🧑🔍     | Direct                       | [@topi314](https://github.com/topi314)                                                                                 |
-
+| Qobuz                                               | 📁💿🎵🧑       | Direct                      | [@munishkhatri720](https://github.com/munishkhatri720)                                                                 |
+| YouTube([yt-dlp](https://github.com/yt-dlp/yt-dlp)) | 📁💿🎵🧑🔍     | Direct                      | [@topi314](https://github.com/topi314)                                                                                 |
+| Lastfm                                              | 📁💿🎵🧑🔍🔬📜 | [Mirror](#what-is-mirroring) | [@asynico](https://github.com/asynico), [@InfNibor](https://github.com/InfNibor) |                           
 ### Features
 
 - 📁 playlists
@@ -90,6 +90,8 @@ To get your Tidal token go [here](#tidal)
 
 To get your Qobuz userOauthToken go [here](#qobuz)
 
+To get your Last.fm api key go [here](#Lastfm)
+
 > [!WARNING]
 > YES `plugins` IS AT ROOT IN THE YAML
 
@@ -113,6 +115,7 @@ plugins:
       tidal: false # Enable Tidal source
       qobuz : false # Enabled qobuz source
       ytdlp: false # Enable yt-dlp source
+      lastfm: false  # Enable Last.fm source
     lyrics-sources:
       spotify: false # Enable Spotify lyrics source
       deezer: false # Enable Deezer lyrics source
@@ -179,6 +182,9 @@ plugins:
       searchLimit: 10 # How many search results should be returned
 #      customLoadArgs: ["-q", "--no-warnings", "--flat-playlist", "--skip-download", "-J"] # Custom arguments to pass to yt-dlp
 #      customPlaybackArgs: ["-q", "--no-warnings", "-f", "bestaudio", "-J"] # Custom arguments for yt-dlp
+    lastfm:
+        apiKey: "your api key" # Required - get this from https://www.last.fm/api/account/create
+        playlistLoadLimit: 6 # Optional - number of pages to load for playlists
 ```
 
 ### Plugin Info
@@ -287,6 +293,7 @@ PATCH /v4/lavasrc/config
 | ?yandexMusic | [Yandex Music Config](#yandex-music-config-object) | The Yandex Music settings |
 | ?vkMusic     | [Vk Music Config](#vk-music-config-object)         | The Vk Music settings     |
 | ?qobuz       | [Qobuz Config](#qobuz-config-object)               | The Qobuz settings        |
+| ?lastfm      | [Lastfm Config](#lastfm-config-object)             | The Lastfm settings       |
 
 ##### Spotify Config Object
 
@@ -801,7 +808,17 @@ AudioPlayerManager playerManager = new DefaultAudioPlayerManager();
 // create a new YTDLPSourceManager with the path to the yt-dlp executable and register it
 playerManager.registerSourceManager(new YTDLPSourceManager("path/to/yt-dlp"));
 ```
+## Lastfm
 
+To get a Last.fm api key you must go [here](https://www.last.fm/api/account/create) and create the application.
+
+```java
+AudioPlayerManager playerManager = new DefaultAudioPlayerManager();
+
+// create a new LastfmSourceManager with the default providers, apiKey and AudioPlayerManager and register it
+var lastfm = new LastfmSourceManager(apiKey, unused -> playerManager, new DefaultMirroringAudioTrackResolver(null));
+playerManager.registerSourceManager(lastfm);
+```
 
 ---
 ## Supported URLs and Queries
@@ -900,3 +917,13 @@ You can read about all the available options [here](https://flowery.pw/docs), a 
 * https://youtu.be/jdWhJcrrjQs
 
 ---
+
+### Lastfm
+
+* `lfmsearch:animals architects`
+* https://www.last.fm/music/Architects/Animals
+* https://www.last.fm/music/Architects/For+Those+That+Wish+to+Exist
+* https://www.last.fm/music/Architects/+albums
+* https://www.last.fm/music/Architects/+tracks
+* https://www.last.fm/music/Architects
+
