@@ -3,8 +3,14 @@ package com.github.topi314.lavasrc.deezer;
 import com.github.topi314.lavasrc.LavaSrcTools;
 import org.apache.http.client.config.CookieSpecs;
 import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.impl.client.BasicCookieStore;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -20,6 +26,12 @@ public class DeezerTokenTracker {
 	private Tokens tokens;
 
 
+	private static final Logger log = LoggerFactory.getLogger(DeezerTokenTracker.class);
+	private static final int MAX_ARL_FETCH_ATTEMPTS = 3;
+	private String arlUrlCache = null;
+	private Instant arlLastFetch = null;
+
+
 	public DeezerTokenTracker(DeezerAudioSourceManager sourceManager, String arl) {
 		this.sourceManager = sourceManager;
 		if (arl == null || arl.isEmpty()) {
@@ -29,14 +41,51 @@ public class DeezerTokenTracker {
 	}
 
 	public String getArl() {
+		if (arl != null && arl.startsWith("http")) {
+			return fetchArlFromUrl();
+		}
 		return this.arl;
 	}
 
-	public void setArl(String arl) {
-		if (arl == null || arl.isEmpty()) {
-			throw new NullPointerException("Deezer arl must be set");
+	private String fetchArlFromUrl() {
+		if (arlUrlCache != null && arlLastFetch != null && Instant.now().isBefore(arlLastFetch.plus(30, ChronoUnit.MINUTES))) {
+			return arlUrlCache;
 		}
-		this.arl = arl;
+		int attempts = 0;
+		while (attempts < MAX_ARL_FETCH_ATTEMPTS) {
+			try (CloseableHttpClient client = HttpClients.createDefault()) {
+				HttpGet get = new HttpGet(this.arl);
+				var response = client.execute(get);
+				int status = response.getStatusLine().getStatusCode();
+				if (status == 200) {
+					String value = EntityUtils.toString(response.getEntity()).trim();
+					if (isValidArl(value)) {
+						arlUrlCache = value;
+						arlLastFetch = Instant.now();
+						log.info("Fetched arl from URL: {}", value);
+						return value;
+					} else {
+						log.warn("Fetched arl value is invalid: {}", value);
+					}
+				} else {
+					log.warn("Failed to fetch arl from URL, status: {}", status);
+				}
+			} catch (Exception e) {
+				log.error("Error fetching arl from URL: {}", this.arl, e);
+			}
+			attempts++;
+		}
+		throw new IllegalStateException("Failed to fetch arl from URL after " + MAX_ARL_FETCH_ATTEMPTS + " attempts");
+	}
+
+	public boolean isValidArl(String value) {
+		return value != null && value.length() == 192 && value.matches("[a-zA-Z0-9]+$");
+	}
+
+	public void invalidateArlCache() {
+		arlUrlCache = null;
+		arlLastFetch = null;
+		log.info("arl cache has been cleared");
 	}
 
 	private void refreshSession() throws IOException {
@@ -88,6 +137,16 @@ public class DeezerTokenTracker {
 			this.refreshSession();
 		}
 		return this.tokens;
+	}
+
+	public void setArl(String arl) {
+		if (arl == null || arl.isEmpty()) {
+			throw new NullPointerException("Deezer arl must be set");
+		}
+		if (!arl.equals(this.arl)) {
+			invalidateArlCache();
+		}
+		this.arl = arl;
 	}
 
 	public static class Tokens {

@@ -26,7 +26,8 @@ import org.apache.http.impl.client.BasicCookieStore;
 import org.apache.http.impl.cookie.BasicClientCookie;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+import org.apache.http.HttpResponse;
+import org.apache.http.client.ClientProtocolException;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -101,56 +102,90 @@ public class DeezerAudioTrack extends ExtendedAudioTrack {
 
 	@Override
 	public void process(LocalAudioTrackExecutor executor) throws Exception {
-		try (var httpInterface = this.sourceManager.getHttpInterface()) {
-			if (this.isPreview) {
-				if (this.previewUrl == null) {
-					throw new FriendlyException("No preview url found", FriendlyException.Severity.COMMON, new IllegalArgumentException());
+		int attempts = 0;
+		final int maxAttempts = 2;
+		Exception lastException = null;
+		while (attempts < maxAttempts) {
+			try (var httpInterface = this.sourceManager.getHttpInterface()) {
+				if (this.isPreview) {
+					if (this.previewUrl == null) {
+						throw new FriendlyException("No preview url found", FriendlyException.Severity.COMMON, new IllegalArgumentException());
+					}
+					try (var stream = new PersistentHttpStream(httpInterface, new URI(this.previewUrl), this.trackInfo.length)) {
+						processDelegate(new Mp3AudioTrack(this.trackInfo, stream), executor);
+					}
+					return;
 				}
 
-				try (var stream = new PersistentHttpStream(httpInterface, new URI(this.previewUrl), this.trackInfo.length)) {
-					processDelegate(new Mp3AudioTrack(this.trackInfo, stream), executor);
+				String arl = null;
+				try {
+					Object userData = getUserData();
+					if (userData != null) {
+						JsonBrowser jsonUserData = JsonBrowser.parse(userData.toString());
+						if (jsonUserData.get("arl") != null) {
+							arl = jsonUserData.get("arl").text();
+						}
+					}
+				} catch (IOException e) {
+					log.debug("Failed to parse arl from userData", e);
+				}
+
+				if (arl == null) {
+					arl = this.sourceManager.getTokenTracker().getArl();
+				}
+				var cookieStore = new BasicCookieStore();
+				httpInterface.getContext().setCookieStore(cookieStore);
+				httpInterface.getContext().setRequestConfig(
+					RequestConfig.copy(httpInterface.getContext().getRequestConfig())
+						.setCookieSpec(CookieSpecs.STANDARD)
+						.build()
+				);
+
+				var cookie = new BasicClientCookie("arl", arl);
+				cookie.setPath("/");
+				cookie.setSecure(true);
+				cookie.setDomain("deezer.com");
+				cookie.setAttribute("domain", ".deezer.com");
+				cookieStore.addCookie(cookie);
+
+				Tokens tokens;
+				try {
+					tokens = this.getTokens(httpInterface);
+				} catch (Exception e) {
+					if (is403Exception(e) && attempts == 0) {
+						log.warn("Deezer returned 403, refreshing arl and retrying");
+						this.sourceManager.getTokenTracker().invalidateArlCache();
+						attempts++;
+						continue;
+					}
+					throw e;
+				}
+				var source = this.getSource(httpInterface, tokens.api, tokens.license);
+				try (var stream = new DeezerPersistentHttpStream(httpInterface, source.url, source.contentLength, this.getTrackDecryptionKey())) {
+					processDelegate(source.format.trackFactory.apply(this.trackInfo, stream), executor);
 				}
 				return;
 			}
-
-			String arl = null;
-			try {
-				Object userData = getUserData();
-				if (userData != null) {
-					JsonBrowser jsonUserData = JsonBrowser.parse(userData.toString());
-					if (jsonUserData.get("arl") != null) {
-						arl = jsonUserData.get("arl").text();
-					}
+			catch (Exception e) {
+				if (is403Exception(e) && attempts == 0) {
+					log.warn("Deezer returned 403, refreshing arl and retrying");
+					this.sourceManager.getTokenTracker().invalidateArlCache();
+					attempts++;
+					continue;
 				}
-			} catch (IOException e) {
-				log.debug("Failed to parse arl from userData", e);
-			}
-
-			if (arl == null) {
-				arl = this.sourceManager.getTokenTracker().getArl();
-			}
-			var cookieStore = new BasicCookieStore();
-			httpInterface.getContext().setCookieStore(cookieStore);
-			httpInterface.getContext().setRequestConfig(
-				RequestConfig.copy(httpInterface.getContext().getRequestConfig())
-					.setCookieSpec(CookieSpecs.STANDARD)
-					.build()
-			);
-
-			var cookie = new BasicClientCookie("arl", arl);
-			cookie.setPath("/");
-			cookie.setSecure(true);
-			cookie.setDomain("deezer.com");
-			cookie.setAttribute("domain", ".deezer.com");
-			cookieStore.addCookie(cookie);
-
-			// TODO: figure out caching these for the arl provided in the config
-			var tokens = this.getTokens(httpInterface);
-			var source = this.getSource(httpInterface, tokens.api, tokens.license);
-			try (var stream = new DeezerPersistentHttpStream(httpInterface, source.url, source.contentLength, this.getTrackDecryptionKey())) {
-				processDelegate(source.format.trackFactory.apply(this.trackInfo, stream), executor);
+				lastException = e;
+				break;
 			}
 		}
+		if (lastException != null) throw lastException;
+	}
+
+	public boolean is403Exception(Exception e) {
+		if (e instanceof java.io.IOException || e instanceof org.apache.http.client.ClientProtocolException) {
+			String msg = e.getMessage();
+			return msg != null && msg.contains("403");
+		}
+		return false;
 	}
 
 	@Override

@@ -35,6 +35,9 @@ tasks {
 	jar {
 		exclude("dev/schlaubi/lyrics/LyricsClient*")
 		exclude("dev/schlaubi/lyrics/Lyrics_jvmKt.class")
+
+		// Ensure Gradle knows about the cross-project output usage
+		dependsOn(project(":main").tasks.named("compileTestJava"))
 	}
 }
 
