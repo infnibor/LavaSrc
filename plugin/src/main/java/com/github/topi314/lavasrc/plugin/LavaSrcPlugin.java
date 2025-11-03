@@ -32,6 +32,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import java.util.Locale;
 
 @Service
 @RestController
@@ -80,13 +81,17 @@ public class LavaSrcPlugin implements AudioPlayerManagerConfiguration, SearchMan
 		this.lyricsSourcesConfig = lyricsSourcesConfig;
 
 		if (sourcesConfig.isAmazonmusic()) {
-			if (amazonMusicConfig.getApiUrl() != null && !amazonMusicConfig.getApiUrl().isEmpty()) {
-				this.amazonMusic = new AmazonMusicSourceManager(
-					amazonMusicConfig.getApiUrl(),
-					amazonMusicConfig.getApiKey()
-				);
+			String apiUrl = amazonMusicConfig.getApiUrl();
+			String apiKey = amazonMusicConfig.getApiKey();
+			if (apiUrl != null && !apiUrl.isBlank() && apiKey != null && !apiKey.isBlank()) {
+				boolean isPublic = apiUrl.toLowerCase(Locale.ROOT).contains("amazon-music-api.vercel.app");
+				if (isPublic) {
+					log.warn("Amazon Music API wskazuje na publiczny endpoint vercel.app. Mogą występować 500/rate limit. Rozważ self-host.");
+				}
+				this.amazonMusic = new AmazonMusicSourceManager(apiUrl, apiKey);
+				log.info("Amazon Music skonfigurowany z endpointem: {}", apiUrl);
 			} else {
-				log.warn("Amazon Music source enabled, but apiUrl is not set!");
+				log.warn("Amazon Music włączony, ale apiUrl i/lub apiKey nie są ustawione. Pomijam rejestrację Amazon Music.");
 			}
 		}
 
@@ -291,13 +296,10 @@ public class LavaSrcPlugin implements AudioPlayerManagerConfiguration, SearchMan
 		}
 		if (this.amazonMusic != null && this.sourcesConfig.isAmazonmusic()) {
 			log.info("Registering Amazon Music search manager...");
-			// Register only if the type is compatible, otherwise skip registration to avoid compilation error
-			try {
-				manager.getClass()
-					.getMethod("registerSearchManager", Object.class)
-					.invoke(manager, this.amazonMusic);
-			} catch (Exception e) {
-				log.warn("Amazon Music search manager could not be registered due to type incompatibility.");
+			if (this.amazonMusic instanceof SearchManager) {
+				manager.registerSearchManager((SearchManager) this.amazonMusic);
+			} else {
+				log.warn("Amazon Music source does not implement SearchManager. Skipping registration.");
 			}
 		}
 		return manager;
@@ -412,3 +414,4 @@ public class LavaSrcPlugin implements AudioPlayerManagerConfiguration, SearchMan
 		}
 	}
 }
+

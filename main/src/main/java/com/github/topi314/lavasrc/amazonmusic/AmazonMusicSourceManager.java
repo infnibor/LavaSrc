@@ -20,7 +20,7 @@ import java.io.InputStream;
 
 public class AmazonMusicSourceManager implements AudioSourceManager {
     private static final String AMAZON_MUSIC_URL_REGEX =
-	    "https?:\\/\\/music\\.amazon\\.[a-z\\.]+\\/(tracks?|albums?|playlists?|artists?|podcast|episode|lyrics)\\/([A-Za-z0-9\\-_]+)";
+	    "https?:\\/\\/music\\.amazon\\.[a-z\\.]+\\/(tracks?|albums?|playlists?|artists?|podcast|episodes?|lyrics)\\/[A-Za-z0-9\\-_]+(?:\\?[^\\s\"]*)?";
     private static final Pattern AMAZON_MUSIC_URL_PATTERN = Pattern.compile(AMAZON_MUSIC_URL_REGEX);
 
     private final String apiUrl;
