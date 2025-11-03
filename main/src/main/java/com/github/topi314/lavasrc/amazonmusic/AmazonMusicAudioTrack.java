@@ -6,10 +6,14 @@ import com.sedmelluq.discord.lavaplayer.track.playback.LocalAudioTrackExecutor;
 import com.sedmelluq.discord.lavaplayer.source.http.HttpAudioTrack;
 import com.sedmelluq.discord.lavaplayer.source.http.HttpAudioSourceManager;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
+import com.sedmelluq.discord.lavaplayer.container.MediaContainerDescriptor;
+import com.sedmelluq.discord.lavaplayer.container.MediaContainerRegistry;
+import com.sedmelluq.discord.lavaplayer.container.MediaContainerProbe;
 
 import java.io.DataOutput;
 import java.io.DataInput;
 import java.io.IOException;
+import java.util.Locale;
 
 public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
 	private final String audioUrl;
@@ -43,7 +47,6 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
 		}
 
 		AudioTrackInfo base = getInfo();
-		// Zbuduj info wymagane przez HttpAudioTrack (identifier i uri ustaw na URL)
 		AudioTrackInfo httpInfo = new AudioTrackInfo(
 			base.title,
 			base.author,
@@ -53,8 +56,31 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
 			url
 		);
 
-		HttpAudioTrack delegate = new HttpAudioTrack(httpInfo, httpSourceManager);
+		MediaContainerDescriptor descriptor = selectDescriptorForUrl(url);
+		HttpAudioTrack delegate = new HttpAudioTrack(httpInfo, descriptor, httpSourceManager);
 		processDelegate(delegate, executor);
+	}
+
+	// Prosty wybór kontenera po rozszerzeniu URL (domyślnie mp4/m4a).
+	private MediaContainerDescriptor selectDescriptorForUrl(String url) {
+		String lower = url.toLowerCase(Locale.ROOT);
+		String id;
+		if (lower.contains(".mp3")) {
+			id = "mp3";
+		} else if (lower.contains(".webm")) {
+			id = "webm";
+		} else if (lower.contains(".ogg") || lower.contains(".oga")) {
+			id = "ogg";
+		} else {
+			// domyślnie traktuj jako mp4/m4a (AAC)
+			id = "mp4";
+		}
+
+		MediaContainerProbe probe = MediaContainerRegistry.DEFAULT_REGISTRY.find(id);
+		if (probe == null) {
+			throw new FriendlyException("Brak obsługi kontenera: " + id, FriendlyException.Severity.SUSPICIOUS, null);
+		}
+		return new MediaContainerDescriptor(probe, null);
 	}
 
 	public void encode(DataOutput output) throws IOException {
