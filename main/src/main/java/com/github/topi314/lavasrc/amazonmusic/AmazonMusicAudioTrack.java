@@ -59,7 +59,8 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
 			throw new FriendlyException("Could not find a container for the Amazon Music track.", FriendlyException.Severity.SUSPICIOUS, null);
 		}
 
-		MediaContainerDescriptor descriptor = probe.createDescriptor(new AudioReference(audioUrl, trackInfo.title));
+		// Dopasowanie do nowego API: przekazujemy MediaContainerHints (null) oraz AudioReference
+		MediaContainerDescriptor descriptor = probe.createDescriptor(null, new AudioReference(audioUrl, trackInfo.title));
 
 		// Create the HttpAudioTrack, passing the original trackInfo, the descriptor, and the source manager
 		InternalAudioTrack httpTrack = new HttpAudioTrack(
