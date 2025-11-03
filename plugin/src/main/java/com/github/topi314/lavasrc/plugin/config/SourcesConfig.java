@@ -19,6 +19,7 @@ public class SourcesConfig {
 	private boolean tidal = false;
 	private boolean ytdlp = false;
 	private boolean jiosaavn = false;
+	private boolean amazonmusic = false;
 
 	public boolean isSpotify() {
 		return this.spotify;
@@ -106,5 +107,13 @@ public class SourcesConfig {
 
 	public void setJiosaavn(boolean jiosaavn) {
 		this.jiosaavn = jiosaavn;
+	}
+
+	public boolean isAmazonmusic() {
+		return this.amazonmusic;
+	}
+
+	public void setAmazonmusic(boolean amazonmusic) {
+		this.amazonmusic = amazonmusic;
 	}
 }

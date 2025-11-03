@@ -18,6 +18,7 @@ plugins:
       qobuz: false # Enabled qobuz source
       ytdlp: false # Enable yt-dlp source
       jiosaavn: false # Enable the JioSaavn source
+      amazonmusic: false # Enable Amazon Music source
     lyrics-sources:
       spotify: false # Enable Spotify lyrics source
       deezer: false # Enable Deezer lyrics source
@@ -102,6 +103,9 @@ plugins:
 #        url: "https://example.org" # The HTTP proxy to use
 #        username: "my-bot" # Optional username to authenticate with the proxy
 #        password: "youshallpass" # Optional password to authenticate with the proxy
+    amazonmusic:
+      apiUrl: "your api url" # The base URL of your Amazon Music API. Required.
+#     apiKey: "your api key" # Optional. Only needed if your API requires an authentication key.
 
 server: # REST and WS server
   port: 2333
