@@ -48,12 +48,11 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
 
 		System.out.println("[AmazonMusicAudioTrack] [INFO] Processing track with audioUrl: " + audioUrl);
 
-		// Get the container registry from the httpSourceManager
-		MediaContainerRegistry registry = httpSourceManager.getContainerRegistry();
+		// Użyj globalnego rejestru kontenerów zamiast httpSourceManager.getContainerRegistry()
+		MediaContainerRegistry registry = MediaContainerRegistry.DEFAULT;
 
-		// Find the correct container descriptor using the audioUrl
-		// We pass the original trackInfo and a new AudioReference for the audioUrl
-		MediaContainerDescriptor descriptor = registry.find(trackInfo, new AudioReference(audioUrl, trackInfo.title));
+		// Dopasuj do nowego API: find przyjmuje String (URL/ścieżkę)
+		MediaContainerDescriptor descriptor = registry.find(audioUrl);
 
 		// If no container is found, playback cannot proceed
 		if (descriptor == null) {
