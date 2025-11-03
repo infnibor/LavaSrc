@@ -48,23 +48,26 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
 
 		System.out.println("[AmazonMusicAudioTrack] [INFO] Processing track with audioUrl: " + audioUrl);
 
-		// Laisse HttpAudioTrack détecter automatiquement le conteneur
-		MediaContainerDescriptor descriptor = null;
+		// Get the container registry from the httpSourceManager
+		MediaContainerRegistry registry = httpSourceManager.getContainerRegistry();
 
-		// La logique de conversion ffmpeg a été supprimée.
-		// Nous déléguons directement l'URL à HttpAudioTrack.
+		// Find the correct container descriptor using the audioUrl
+		// We pass the original trackInfo and a new AudioReference for the audioUrl
+		MediaContainerDescriptor descriptor = registry.find(trackInfo, new AudioReference(audioUrl, trackInfo.title));
+
+		// If no container is found, playback cannot proceed
+		if (descriptor == null) {
+			throw new FriendlyException("Could not find a container for the Amazon Music track.", FriendlyException.Severity.SUSPICIOUS, null);
+		}
+
+		// Create the HttpAudioTrack, passing the original trackInfo, the descriptor, and the source manager
 		InternalAudioTrack httpTrack = new HttpAudioTrack(
-			new AudioTrackInfo(
-				trackInfo.title,
-				trackInfo.author,
-				trackInfo.length,
-				trackInfo.identifier,
-				trackInfo.isStream,
-				audioUrl // Utilise l'URL audio directe
-			),
+			trackInfo,
 			descriptor,
 			httpSourceManager
 		);
+
+		// Process the track
 		processDelegate(httpTrack, executor);
 	}
 
