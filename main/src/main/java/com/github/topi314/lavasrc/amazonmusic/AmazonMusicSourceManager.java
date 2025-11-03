@@ -645,42 +645,75 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 			return null;
 		}
 
-		String url = apiUrl.endsWith("/") ? apiUrl + "stream_urls?id=" + trackId : apiUrl + "/stream_urls?id=" + trackId;
+		String base = apiUrl.endsWith("/") ? apiUrl : apiUrl + "/";
+		String url = base + "stream_urls?id=" + trackId;
 		System.out.println("[AmazonMusic] [DEBUG] Fetching stream URLs from: " + url);
 
-		HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
-		conn.setRequestMethod("GET");
-		conn.setConnectTimeout(10000);
-		conn.setReadTimeout(10000);
-		if (apiKey != null && !apiKey.isEmpty()) {
-			conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+		// Retry na 5xx
+		final int maxAttempts = 3;
+		for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+			HttpResponse res = httpGet(url);
+			System.out.println("[AmazonMusic] [DEBUG] Response status: " + res.status + ", attempt " + attempt + "/" + maxAttempts);
+			System.out.println("[AmazonMusic] [DEBUG] Response JSON: " + res.body);
+
+			if (res.status == 200) {
+				AudioUrlResult parsed = parseAudioFromJson(res.body);
+				if (parsed != null && parsed.audioUrl != null) {
+					return parsed;
+				}
+				System.err.println("[AmazonMusic] [ERROR] Could not extract audio from stream_urls payload.");
+				break; // 200 bez danych – nie ma sensu retry tej samej ścieżki
+			}
+
+			if (res.status >= 500 && res.status < 600) {
+				// Backoff
+				try {
+					Thread.sleep(300L * attempt);
+				} catch (InterruptedException ie) {
+					Thread.currentThread().interrupt();
+				}
+				continue;
+			}
+
+			// Inne kody niż 2xx i 5xx – przerwij pętlę i przejdź do fallbacków
+			break;
 		}
 
-		int status = conn.getResponseCode();
-		InputStream inputStream = (status >= 200 && status < 300) ? conn.getInputStream() : conn.getErrorStream();
-
-		BufferedReader in = new BufferedReader(new InputStreamReader(inputStream));
-		StringBuilder content = new StringBuilder();
-		String line;
-		while ((line = in.readLine()) != null) {
-			content.append(line);
-		}
-		in.close();
-		conn.disconnect();
-
-		String json = content.toString();
-		System.out.println("[AmazonMusic] [DEBUG] Response JSON: " + json);
-
-		if (status != 200) {
-			System.err.println("[AmazonMusic] [ERROR] Failed to fetch stream_urls for track: " + trackId);
-			System.err.println("Response: " + json);
-			return null;
+		// Fallback 1: alternatywne endpointy znane z kompatybilnych API
+		String[] alt = new String[] { "stream_url", "stream" };
+		for (String endpoint : alt) {
+			String altUrl = base + endpoint + "?id=" + trackId;
+			System.out.println("[AmazonMusic] [DEBUG] Fallback fetching from: " + altUrl);
+			HttpResponse altRes = httpGet(altUrl);
+			System.out.println("[AmazonMusic] [DEBUG] Fallback response status: " + altRes.status);
+			System.out.println("[AmazonMusic] [DEBUG] Fallback response JSON: " + altRes.body);
+			if (altRes.status == 200) {
+				AudioUrlResult parsed = parseAudioFromJson(altRes.body);
+				if (parsed != null && parsed.audioUrl != null) {
+					return parsed;
+				}
+			}
 		}
 
-		// 1. Szukaj klasycznego audioUrl
+		// Fallback 2: spróbuj z /track?id=..., czasem endpoint track zawiera te same pola (urls/data)
+		AudioUrlResult trackFallback = tryFetchAudioViaTrackEndpoint(trackId);
+		if (trackFallback != null && trackFallback.audioUrl != null) {
+			return trackFallback;
+		}
+
+		System.err.println("[AmazonMusic] [ERROR] audioUrl is still null after processing stream endpoints for track: " + trackId);
+		return null;
+	}
+
+	// Wspólne parsowanie audioUrl/artwork/isrc z JSON (działa dla stream_urls, stream_url, stream, a także track z polami urls/data)
+	private AudioUrlResult parseAudioFromJson(String json) {
+		if (json == null || json.isEmpty()) return null;
+
+		// 1) Spróbuj standardowego pola urls.{high|medium|low}
 		String audioUrl = null;
 		String artworkUrl = null;
 		String isrc = null;
+
 		Matcher urlsMatcher = Pattern.compile("\"urls\"\\s*:\\s*\\{(.*?)\\}").matcher(json);
 		if (urlsMatcher.find()) {
 			String urlsContent = urlsMatcher.group(1);
@@ -691,13 +724,15 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 		if (audioUrl == null) {
 			audioUrl = extractJsonString(json, "audioUrl");
 		}
-		// 2. Szukaj bezpośredniego linku do pliku mp3/flac/opus oraz artworkUrl i isrc z data[]
-		if ((audioUrl == null || !isSupportedAudioFormat(audioUrl))) {
+
+		// 2) Jeśli brak lub niepewne, spróbuj data[] z base_url i dodatkowymi polami
+		if (audioUrl == null || audioUrl.isEmpty()) {
 			String bestUrl = null;
 			String bestArtwork = null;
 			String bestIsrc = null;
 			String bestMime = null;
-			int bestQuality = -1;
+			int bestScore = -1;
+
 			Matcher dataArrayMatcher = Pattern.compile("\"data\"\\s*:\\s*\\[(.*?)\\](?!\\s*,)").matcher(json);
 			if (dataArrayMatcher.find()) {
 				String dataArray = dataArrayMatcher.group(1);
@@ -710,13 +745,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 					String codecs = extractJsonString(entry, "codecs");
 					String entryArtwork = extractJsonString(entry, "image");
 					String entryIsrc = extractJsonString(entry, "isrc");
-					int qualityRanking = -1;
-					try {
-						Matcher qMatcher = Pattern.compile("\"quality_ranking\"\\s*:\\s*(\\d+)").matcher(entry);
-						if (qMatcher.find()) qualityRanking = Integer.parseInt(qMatcher.group(1));
-					} catch (Exception ignore) {}
 
-					// Preferencje: mp3 > opus > flac > audio/mp4
 					int score = 0;
 					if (mimeType != null && mimeType.contains("mp3")) score = 100;
 					else if (codecs != null && codecs.contains("opus")) score = 90;
@@ -724,22 +753,16 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 					else if (mimeType != null && mimeType.contains("audio/mp4")) score = 70;
 					else score = 10;
 
-					// Im wyższy qualityRanking, tym lepiej (jeśli score równe)
-					if (baseUrl != null && score > bestQuality) {
+					if (baseUrl != null && score > bestScore) {
+						bestScore = score;
 						bestUrl = baseUrl;
 						bestArtwork = entryArtwork;
 						bestIsrc = entryIsrc;
 						bestMime = mimeType;
-						bestQuality = score;
-					} else if (baseUrl != null && score == bestQuality && qualityRanking > 0) {
-						bestUrl = baseUrl;
-						bestArtwork = entryArtwork;
-						bestIsrc = entryIsrc;
-						bestMime = mimeType;
-						bestQuality = score;
 					}
 				}
 			}
+
 			if (bestUrl != null) {
 				System.out.println("[AmazonMusic] [DEBUG] Final base_url: " + bestUrl + " (mime_type: " + bestMime + ")");
 				audioUrl = bestUrl;
@@ -748,13 +771,54 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 			}
 		}
 
-		// Log error jeśli nadal nie znaleziono
-		if (audioUrl == null) {
-			System.err.println("[AmazonMusic] [ERROR] audioUrl is still null after processing stream_urls for track: " + trackId);
+		if (audioUrl == null || audioUrl.isEmpty()) {
 			return null;
 		}
-
 		return new AudioUrlResult(audioUrl, artworkUrl, isrc);
+	}
+
+	// Fallback: pobierz JSON z /track?id=... i użyj tego samego parsera
+	private AudioUrlResult tryFetchAudioViaTrackEndpoint(String trackId) throws IOException {
+		String base = apiUrl.endsWith("/") ? apiUrl : apiUrl + "/";
+		String trackUrl = base + "track?id=" + trackId;
+		System.out.println("[AmazonMusic] [DEBUG] Fallback via track endpoint: " + trackUrl);
+		HttpResponse res = httpGet(trackUrl);
+		System.out.println("[AmazonMusic] [DEBUG] Track endpoint status: " + res.status);
+		System.out.println("[AmazonMusic] [DEBUG] Track endpoint JSON: " + res.body);
+		if (res.status != 200) return null;
+		return parseAudioFromJson(res.body);
+	}
+
+	// Prosty helper HTTP czytający również error stream
+	private static class HttpResponse {
+		final int status;
+		final String body;
+		HttpResponse(int status, String body) {
+			this.status = status;
+			this.body = body;
+		}
+	}
+
+	private HttpResponse httpGet(String url) throws IOException {
+		HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+		conn.setRequestMethod("GET");
+		conn.setConnectTimeout(10000);
+		conn.setReadTimeout(10000);
+		if (apiKey != null && !apiKey.isEmpty()) {
+			conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+		}
+		int status = conn.getResponseCode();
+		InputStream inputStream = (status >= 200 && status < 300) ? conn.getInputStream() : conn.getErrorStream();
+
+		BufferedReader in = new BufferedReader(new InputStreamReader(inputStream));
+		StringBuilder content = new StringBuilder();
+		String line;
+		while ((line = in.readLine()) != null) {
+			content.append(line);
+		}
+		in.close();
+		conn.disconnect();
+		return new HttpResponse(status, content.toString());
 	}
 
 	/**
