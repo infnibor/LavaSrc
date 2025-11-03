@@ -40,6 +40,48 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
 
 	@Override
 	public void process(LocalAudioTrackExecutor executor) throws Exception {
+		// ...existing code that prepares/obtains audioUrl and trackInfo...
+		final String url = this.audioUrl; // upewnij się, że to finalna odszyfrowana URL do MP4/M4A
+		final AudioTrackInfo info = getInfo();
+
+		// Użyj HttpInterface z SourceManagera (ten sam, którego dotąd używałeś do HTTP)
+		final HttpInterface httpInterface = sourceManager.getHttpInterface();
+
+		try (SeekableInputStream stream = new PersistentHttpStream(httpInterface, new URI(url), null)) {
+			// 1) Spróbuj wykryć kontener z danych
+			MediaContainerDescriptor descriptor = MediaContainerDetection.detectContainer(
+				MediaContainerRegistry.DEFAULT_REGISTRY, stream, info
+			);
+
+			if (descriptor == null) {
+				// 2) Fallback po rozszerzeniu URL, jeśli z jakiegoś powodu detection nic nie zwróciło
+				String lower = url.toLowerCase(Locale.ROOT);
+				if (lower.contains(".mp4") || lower.contains(".m4a")) {
+					descriptor = MediaContainerRegistry.DEFAULT_REGISTRY.byId("mp4");
+				}
+			}
+
+			if (descriptor == null) {
+				throw new FriendlyException("Nie udało się wykryć kontenera dla: " + url, Severity.SUSPICIOUS, null);
+			}
+
+			// 3) Utwórz delegowany track na podstawie descriptor + stream i uruchom go
+			AudioTrack delegate = descriptor.createTrack(info, stream);
+			if (delegate == null) {
+				throw new FriendlyException("Kontener nie zwrócił ścieżki audio (descriptor=" + descriptor + ")", Severity.SUSPICIOUS, null);
+			}
+
+			// Przetwórz delegata przez standardowy executor
+			processDelegate(delegate, executor);
+		} catch (FriendlyException fe) {
+			throw fe;
+		} catch (Exception e) {
+			throw new FriendlyException("Błąd odtwarzania strumienia HTTP: " + url, Severity.SUSPICIOUS, e);
+		}
+	}
+
+	@Override
+	public void process(LocalAudioTrackExecutor executor) throws Exception {
 		if (audioUrl == null || audioUrl.isEmpty()) {
 			System.err.println("[AmazonMusicAudioTrack] [ERROR] Missing or invalid audioUrl for track: " + trackInfo.identifier);
 			System.err.println("[AmazonMusicAudioTrack] [ERROR] Full trackInfo: " + trackInfo);
@@ -48,23 +90,26 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
 
 		System.out.println("[AmazonMusicAudioTrack] [INFO] Processing track with audioUrl: " + audioUrl);
 
-		// Laisse HttpAudioTrack détecter automatiquement le conteneur
-		MediaContainerDescriptor descriptor = null;
+		// Get the container registry from the httpSourceManager
+		MediaContainerRegistry registry = httpSourceManager.getContainerRegistry();
 
-		// La logique de conversion ffmpeg a été supprimée.
-		// Nous déléguons directement l'URL à HttpAudioTrack.
+		// Find the correct container descriptor using the audioUrl
+		// We pass the original trackInfo and a new AudioReference for the audioUrl
+		MediaContainerDescriptor descriptor = registry.find(trackInfo, new AudioReference(audioUrl, trackInfo.title));
+
+		// If no container is found, playback cannot proceed
+		if (descriptor == null) {
+			throw new FriendlyException("Could not find a container for the Amazon Music track.", FriendlyException.Severity.SUSPICIOUS, null);
+		}
+
+		// Create the HttpAudioTrack, passing the original trackInfo, the descriptor, and the source manager
 		InternalAudioTrack httpTrack = new HttpAudioTrack(
-			new AudioTrackInfo(
-				trackInfo.title,
-				trackInfo.author,
-				trackInfo.length,
-				trackInfo.identifier,
-				trackInfo.isStream,
-				audioUrl // Utilise l'URL audio directe
-			),
+			trackInfo,
 			descriptor,
 			httpSourceManager
 		);
+
+		// Process the track
 		processDelegate(httpTrack, executor);
 	}
 
