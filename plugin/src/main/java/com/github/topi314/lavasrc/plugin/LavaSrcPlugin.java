@@ -294,14 +294,6 @@ public class LavaSrcPlugin implements AudioPlayerManagerConfiguration, SearchMan
 			log.info("Registering JioSaavn search manager...");
 			manager.registerSearchManager(this.jioSaavn);
 		}
-		if (this.amazonMusic != null && this.sourcesConfig.isAmazonmusic()) {
-			log.info("Registering Amazon Music search manager...");
-			if (this.amazonMusic instanceof SearchManager) {
-				manager.registerSearchManager((SearchManager) this.amazonMusic);
-			} else {
-				log.warn("Amazon Music source does not implement SearchManager. Skipping registration.");
-			}
-		}
 		return manager;
 	}
 
