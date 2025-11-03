@@ -16,76 +16,95 @@ import java.io.IOException;
 // Importations pour ffmpeg et la manipulation de fichiers supprimées
 
 public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
-	private final String audioUrl;
-	private final String isrc;
-	private final AmazonMusicSourceManager sourceManager;
-	private final HttpAudioSourceManager httpSourceManager;
-	private final String artworkUrl;
+    private final String audioUrl;
+    private final String isrc;
+    private final AmazonMusicSourceManager sourceManager;
+    private final HttpAudioSourceManager httpSourceManager;
+    private final String artworkUrl;
 
-	public AmazonMusicAudioTrack(AudioTrackInfo trackInfo, String audioUrl, String isrc, String artworkUrl, AmazonMusicSourceManager sourceManager) {
-		super(trackInfo);
-		this.audioUrl = audioUrl;
-		this.isrc = isrc;
-		this.artworkUrl = artworkUrl;
-		this.sourceManager = sourceManager;
-		this.httpSourceManager = new HttpAudioSourceManager();
-	}
+    public AmazonMusicAudioTrack(AudioTrackInfo trackInfo, String audioUrl, String isrc, String artworkUrl, AmazonMusicSourceManager sourceManager) {
+        super(trackInfo);
+        this.audioUrl = audioUrl;
+        this.isrc = isrc;
+        this.artworkUrl = artworkUrl;
+        this.sourceManager = sourceManager;
+        this.httpSourceManager = new HttpAudioSourceManager();
+    }
 
-	public String getIsrc() {
-		return isrc;
-	}
+    public String getIsrc() {
+        return isrc;
+    }
 
-	public String getArtworkUrl() {
-		return artworkUrl;
-	}
+    public String getArtworkUrl() {
+        return artworkUrl;
+    }
 
-	@Override
-	public void process(LocalAudioTrackExecutor executor) throws Exception {
-		if (audioUrl == null || audioUrl.isEmpty()) {
-			System.err.println("[AmazonMusicAudioTrack] [ERROR] Missing or invalid audioUrl for track: " + trackInfo.identifier);
-			System.err.println("[AmazonMusicAudioTrack] [ERROR] Full trackInfo: " + trackInfo);
-			throw new IllegalStateException("Missing or invalid audioUrl for Amazon Music track.");
-		}
+    @Override
+    public void process(LocalAudioTrackExecutor executor) throws Exception {
+        if (audioUrl == null || audioUrl.isEmpty()) {
+            System.err.println("[AmazonMusicAudioTrack] [ERROR] Missing or invalid audioUrl for track: " + trackInfo.identifier);
+            System.err.println("[AmazonMusicAudioTrack] [ERROR] Full trackInfo: " + trackInfo);
+            throw new IllegalStateException("Missing or invalid audioUrl for Amazon Music track.");
+        }
 
-		System.out.println("[AmazonMusicAudioTrack] [INFO] Processing track with audioUrl: " + audioUrl);
+        System.out.println("[AmazonMusicAudioTrack] [INFO] Processing track with audioUrl: " + audioUrl);
 
-		MediaContainerRegistry registry = MediaContainerRegistry.DEFAULT_REGISTRY;
-		MediaContainerProbe probe = registry.find(audioUrl);
+        MediaContainerRegistry registry = MediaContainerRegistry.DEFAULT_REGISTRY;
 
-		if (probe == null) {
-			throw new FriendlyException("Could not find a container for the Amazon Music track.", FriendlyException.Severity.SUSPICIOUS, null);
-		}
+        // Use a cleaned identifier (without query string) to help extension-based matching
+        String identifierForProbe = audioUrl;
+        int q = identifierForProbe.indexOf('?');
+        if (q >= 0) {
+            identifierForProbe = identifierForProbe.substring(0, q);
+        }
 
-		// Utwórz descriptor z probe + URL (String), zgodnie z aktualnym API
-		MediaContainerDescriptor descriptor = new MediaContainerDescriptor(
-			probe,
-			audioUrl
-		);
+        MediaContainerProbe probe = registry.find(identifierForProbe);
 
-		InternalAudioTrack httpTrack = new HttpAudioTrack(
-			trackInfo,
-			descriptor,
-			httpSourceManager
-		);
+        // If still not detected, try a couple of common fallbacks based on likely Amazon Music formats
+        if (probe == null) {
+            if (identifierForProbe.endsWith(".mp4") || identifierForProbe.endsWith(".m4a")) {
+                // Try with a dummy name to force extension-based lookup
+                probe = registry.find("dummy.m4a");
+                if (probe == null) {
+                    probe = registry.find("dummy.mp4");
+                }
+            }
+        }
 
-		processDelegate(httpTrack, executor);
-	}
+        if (probe == null) {
+            throw new FriendlyException("Could not find a container for the Amazon Music track.", FriendlyException.Severity.SUSPICIOUS, null);
+        }
 
-	public void encode(DataOutput output) throws IOException {
-		output.writeUTF(audioUrl != null ? audioUrl : "");
-		output.writeUTF(isrc != null ? isrc : "");
-		output.writeUTF(artworkUrl != null ? artworkUrl : "");
-	}
+        // Create descriptor from the found probe and original URL
+        MediaContainerDescriptor descriptor = new MediaContainerDescriptor(
+            probe,
+            audioUrl
+        );
 
-	public static AmazonMusicAudioTrack decode(AudioTrackInfo trackInfo, DataInput input, AmazonMusicSourceManager sourceManager) throws IOException {
-		String audioUrl = input.readUTF();
-		String isrc = input.readUTF();
-		String artworkUrl = input.readUTF();
-		return new AmazonMusicAudioTrack(trackInfo, audioUrl, isrc, artworkUrl, sourceManager);
-	}
+        InternalAudioTrack httpTrack = new HttpAudioTrack(
+            trackInfo,
+            descriptor,
+            httpSourceManager
+        );
 
-	@Override
-	public AudioSourceManager getSourceManager() {
-		return sourceManager;
-	}
+        processDelegate(httpTrack, executor);
+    }
+
+    public void encode(DataOutput output) throws IOException {
+        output.writeUTF(audioUrl != null ? audioUrl : "");
+        output.writeUTF(isrc != null ? isrc : "");
+        output.writeUTF(artworkUrl != null ? artworkUrl : "");
+    }
+
+    public static AmazonMusicAudioTrack decode(AudioTrackInfo trackInfo, DataInput input, AmazonMusicSourceManager sourceManager) throws IOException {
+        String audioUrl = input.readUTF();
+        String isrc = input.readUTF();
+        String artworkUrl = input.readUTF();
+        return new AmazonMusicAudioTrack(trackInfo, audioUrl, isrc, artworkUrl, sourceManager);
+    }
+
+    @Override
+    public AudioSourceManager getSourceManager() {
+        return sourceManager;
+    }
 }
