@@ -88,13 +88,13 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
             // Handle episodes
             if ("episode".equals(type)) {
                 TrackJson episodeJson = fetchEpisodeInfo(id);
-                if (episodeJson == null) return AudioReference.NO_TRACK;
+                if (episodeJson == null) return null;
                 AudioUrlResult audioResult = episodeJson.audioUrl != null
                     ? new AudioUrlResult(episodeJson.audioUrl, episodeJson.artworkUrl, episodeJson.isrc)
                     : fetchAudioUrlFromStreamUrls(episodeJson.id);
                 if (audioResult == null || audioResult.audioUrl == null) {
                     System.err.println("[AmazonMusicSourceManager] [ERROR] audioUrl is null for episode: " + episodeJson.id);
-                    return AudioReference.NO_TRACK;
+                    return null;
                 }
                 AudioTrackInfo info = new AudioTrackInfo(
                     episodeJson.title,
@@ -157,7 +157,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                 }
                 if (foundTrack.audioUrl == null) {
                     System.err.println("[AmazonMusicSourceManager] [ERROR] audioUrl is still null after stream_urls for track: " + foundTrack.id);
-                    return AudioReference.NO_TRACK;
+                    return null;
                 }
                 AudioTrackInfo info = new AudioTrackInfo(
                     foundTrack.title,
@@ -172,7 +172,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
             } else if ("tracks".equals(type)) {
                 String trackId = id;
                 TrackJson trackJson = fetchTrackInfo(trackId);
-                if (trackJson == null) return AudioReference.NO_TRACK;
+                if (trackJson == null) return null;
                 if (trackJson.audioUrl == null) {
                     AudioUrlResult audioResult = fetchAudioUrlFromStreamUrls(trackJson.id != null ? trackJson.id : trackId);
                     if (audioResult != null) {
@@ -183,7 +183,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                 }
                 if (trackJson.audioUrl == null) {
                     System.err.println("[AmazonMusicSourceManager] [ERROR] audioUrl is null for track: " + trackJson.id);
-                    return AudioReference.NO_TRACK;
+                    return null;
                 }
                 AudioTrackInfo info = new AudioTrackInfo(
                     trackJson.title,
@@ -298,7 +298,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                 return new BasicAudioPlaylist(artistJson.name != null ? artistJson.name : "Amazon Music Artist", tracks, null, false);
             } else {
                 System.err.println("[AmazonMusic] [ERROR] Unsupported type: " + type);
-                return AudioReference.NO_TRACK;
+                return null;
             }
         } catch (IOException e) {
             System.err.println("[AmazonMusic] [ERROR] Network error while loading item: " + e.getMessage());
@@ -773,6 +773,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 		Matcher urlsMatcher = Pattern.compile("\"urls\"\\s*:\\s*\\{(.*?)\\}").matcher(json);
 		if (urlsMatcher.find()) {
 			String urlsContent = urlsMatcher.group(1);
+			// preferuj formaty wspierane przez Lavaplayer (bez mp4)
 			String[] keys = new String[] { "high", "medium", "low" };
 			for (String k : keys) {
 				String u = extractJsonString(urlsContent, k);
@@ -781,15 +782,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 					break;
 				}
 			}
-		}
-
-		// 1a) Preview URL (jeśli backend zwraca tylko metadane)
-		if (audioUrl == null) {
-			String preview = extractJsonString(json, "preview_url");
-			if (preview == null) preview = extractJsonString(json, "previewUrl");
-			if (preview != null && isSupportedAudioFormat(preview)) {
-				audioUrl = preview;
-			}
+			// jeśli w urls* są tylko mp4/DRM, zostaw audioUrl puste, by wymusić fallback
 		}
 
 		// 2) Jeśli brak lub niepewne, spróbuj data[] z base_url – pomijaj DRM i mp4
@@ -839,16 +832,17 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 
 		// 3) Ostatnia deska ratunku: wyszukaj pierwszy bezpośredni URL audio po rozszerzeniu (bez mp4)
 		if (audioUrl == null || audioUrl.isEmpty()) {
-			audioUrl = extractUrlByExtensions(json, "mp3", "m3u8", "ogg", "flac", "wav", "m4a");
+			audioUrl = extractUrlByExtensions(json, "mp3", "m3u8", "ogg", "flac", "wav");
 		}
 
+		// jeśli nadal brak – daj szansę wyższym fallbackom
 		if (audioUrl == null || audioUrl.isEmpty()) {
 			return null;
 		}
 		return new AudioUrlResult(audioUrl, artworkUrl, isrc);
 	}
 
-    // Prosty helper HTTP czytający również error stream
+	// Prosty helper HTTP czytający również error stream
 	private static class HttpResponse {
 		final int status;
 		final String body;
