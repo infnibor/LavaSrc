@@ -82,35 +82,40 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
 
 	@Override
 	public void process(LocalAudioTrackExecutor executor) throws Exception {
-		if (audioUrl == null || audioUrl.isEmpty()) {
-			System.err.println("[AmazonMusicAudioTrack] [ERROR] Missing or invalid audioUrl for track: " + trackInfo.identifier);
-			System.err.println("[AmazonMusicAudioTrack] [ERROR] Full trackInfo: " + trackInfo);
-			throw new IllegalStateException("Missing or invalid audioUrl for Amazon Music track.");
+		// ...existing code that ensures this.audioUrl is the final decrypted URL...
+		final String url = this.audioUrl;
+		final AudioTrackInfo info = this.trackInfo; // lub metoda getInfo(), jeśli taka istnieje
+
+		// Dobierz kontener po rozszerzeniu URL
+		String lower = url.toLowerCase(Locale.ROOT);
+		String containerId = null;
+		if (lower.contains(".mp4") || lower.contains(".m4a")) {
+			containerId = "mp4";
+		}
+		if (containerId == null) {
+			throw new FriendlyException("Nieznany kontener dla URL: " + url, Severity.SUSPICIOUS, null);
 		}
 
-		System.out.println("[AmazonMusicAudioTrack] [INFO] Processing track with audioUrl: " + audioUrl);
-
-		// Get the container registry from the httpSourceManager
-		MediaContainerRegistry registry = httpSourceManager.getContainerRegistry();
-
-		// Find the correct container descriptor using the audioUrl
-		// We pass the original trackInfo and a new AudioReference for the audioUrl
-		MediaContainerDescriptor descriptor = registry.find(trackInfo, new AudioReference(audioUrl, trackInfo.title));
-
-		// If no container is found, playback cannot proceed
+		MediaContainerDescriptor descriptor = MediaContainerRegistry.DEFAULT_REGISTRY.find(containerId);
 		if (descriptor == null) {
-			throw new FriendlyException("Could not find a container for the Amazon Music track.", FriendlyException.Severity.SUSPICIOUS, null);
+			throw new FriendlyException("Brak descriptor dla kontenera: " + containerId, Severity.SUSPICIOUS, null);
 		}
 
-		// Create the HttpAudioTrack, passing the original trackInfo, the descriptor, and the source manager
-		InternalAudioTrack httpTrack = new HttpAudioTrack(
-			trackInfo,
-			descriptor,
-			httpSourceManager
-		);
+		try (HttpInterface http = httpSourceManager.getHttpInterface();
+		     SeekableInputStream stream = new PersistentHttpStream(http, new URI(url), null)) {
 
-		// Process the track
-		processDelegate(httpTrack, executor);
+			// Utwórz delegowaną ścieżkę z descriptor + stream
+			InternalAudioTrack delegate = (InternalAudioTrack) descriptor.createTrack(info, stream);
+			if (delegate == null) {
+				throw new FriendlyException("Kontener nie zwrócił ścieżki audio (descriptor=" + descriptor + ")", Severity.SUSPICIOUS, null);
+			}
+
+			processDelegate(delegate, executor);
+		} catch (FriendlyException fe) {
+			throw fe;
+		} catch (Exception e) {
+			throw new FriendlyException("Błąd odtwarzania strumienia HTTP: " + url, Severity.SUSPICIOUS, e);
+		}
 	}
 
 	public void encode(DataOutput output) throws IOException {
