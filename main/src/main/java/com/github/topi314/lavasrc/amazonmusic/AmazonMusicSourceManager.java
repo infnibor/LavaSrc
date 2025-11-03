@@ -20,7 +20,7 @@ import java.io.InputStream;
 
 public class AmazonMusicSourceManager implements AudioSourceManager {
     private static final String AMAZON_MUSIC_URL_REGEX =
-        "https?:\\/\\/music\\.amazon\\.[a-z\\.]+\\/(tracks?|albums?|playlists?|artists?|podcast|episode|lyrics)\\/([A-Za-z0-9]+)";
+	    "https?:\\/\\/music\\.amazon\\.[a-z\\.]+\\/(tracks?|albums?|playlists?|artists?|podcast|episode|lyrics)\\/([A-Za-z0-9\\-_]+)";
     private static final Pattern AMAZON_MUSIC_URL_PATTERN = Pattern.compile(AMAZON_MUSIC_URL_REGEX);
 
     private final String apiUrl;
@@ -51,7 +51,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
         String type = matcher.group(1);
         String id = matcher.group(2);
 
-        id = id.split("[^a-zA-Z0-9]", 2)[0];
+	    id = id.split("[^a-zA-Z0-9\\-_]", 2)[0];
 
         // Added declaration of the trackAsin variable
         String trackAsin = reference.identifier.contains("?") ? extractQueryParam(reference.identifier, "trackAsin") : null;
