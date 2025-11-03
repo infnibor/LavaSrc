@@ -17,6 +17,7 @@ import java.io.BufferedReader;
 import java.util.List;
 import java.util.ArrayList;
 import java.io.InputStream;
+import java.util.Arrays;
 
 public class AmazonMusicSourceManager implements AudioSourceManager {
     private static final String AMAZON_MUSIC_URL_REGEX =
@@ -593,15 +594,59 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
         conn.disconnect();
 
         String json = content.toString();
+        // Skup się na sekcji "data" (jeśli istnieje), inaczej czytaj z całego JSON
+        String dataObj = extractObject(json, "data");
+        String scope = dataObj != null ? dataObj : json;
+
         TrackJson result = new TrackJson();
-        result.title = extractJsonString(json, "title", "Unknown Title");
-        result.artist = extractArtistFlexible(json, "Unknown Artist");
-        result.duration = extractJsonLong(json, "duration", 0L);
-        result.audioUrl = extractJsonString(json, "audioUrl", null);
-        result.id = extractJsonString(json, "id", null);
-        result.asin = extractJsonString(json, "asin", null);
-        result.artworkUrl = extractJsonString(json, "image", null);
-        result.isrc = extractJsonString(json, "isrc", null);
+        // Pola podstawowe
+        result.title = extractJsonString(scope, "title", "Unknown Title");
+        result.artist = extractArtistFlexible(scope, "Unknown Artist");
+        result.duration = extractJsonLong(scope, "duration", 0L);
+        result.audioUrl = extractJsonString(scope, "audioUrl", null);
+        result.id = extractJsonString(scope, "id", null);
+        result.asin = extractJsonString(scope, "asin", null);
+        result.artworkUrl = extractJsonString(scope, "image", null);
+        result.isrc = extractJsonString(scope, "isrc", null);
+        result.url = extractJsonString(scope, "url", null);
+
+        // Pola rozszerzone
+        result.trackNum = (int) extractJsonLong(scope, "track_num", 0L);
+        result.discNum = (int) extractJsonLong(scope, "disc_num", 0L);
+        result.genre = extractJsonString(scope, "genre", null);
+        result.releaseDate = extractJsonLong(scope, "release_date", 0L);
+        result.explicit = extractJsonBoolean(scope, "explicit", false);
+        result.hasLyrics = extractJsonBoolean(scope, "has_lyrics", false);
+        result.languages = extractJsonString(scope, "languages", null);
+        result.primaryArtistName = extractJsonString(scope, "primary_artist_name", null);
+        result.isFree = extractJsonBoolean(scope, "is_free", false);
+        result.isPrime = extractJsonBoolean(scope, "is_prime", false);
+        result.isMusicSubscription = extractJsonBoolean(scope, "is_music_subscription", false);
+        result.isSonicRush = extractJsonBoolean(scope, "is_sonic_rush", false);
+        result.type = extractJsonString(scope, "type", null);
+        result.assetQualities = extractJsonStringArray(scope, "asset_qualities");
+
+        // Album
+        String albumObj = extractObject(scope, "album");
+        if (albumObj != null) {
+            result.albumTitle = extractJsonString(albumObj, "title", null);
+            result.albumAsin = extractJsonString(albumObj, "asin", null);
+            result.albumId = extractJsonString(albumObj, "id", null);
+            result.albumImage = extractJsonString(albumObj, "image", null);
+            result.albumUrl = extractJsonString(albumObj, "url", null);
+        }
+
+        // Artist
+        String artistObj = extractObject(scope, "artist");
+        if (artistObj != null) {
+            // nazwa artysty już wyciągnięta; nadpisz jeśli to precyzyjniejsza wartość
+            String artistName = extractJsonString(artistObj, "name", null);
+            if (artistName != null) result.artist = artistName;
+            result.artistId = extractJsonString(artistObj, "id", null);
+            result.artistAsin = extractJsonString(artistObj, "asin", null);
+            result.artistUrl = extractJsonString(artistObj, "url", null);
+        }
+
         return result;
     }
 
@@ -649,7 +694,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 		String url = base + "stream_urls?id=" + trackId;
 		System.out.println("[AmazonMusic] [DEBUG] Fetching stream URLs from: " + url);
 
-		// Retry na 5xx
+		// Retry na 5xx (główna ścieżka)
 		final int maxAttempts = 3;
 		for (int attempt = 1; attempt <= maxAttempts; attempt++) {
 			HttpResponse res = httpGet(url);
@@ -662,20 +707,13 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 					return parsed;
 				}
 				System.err.println("[AmazonMusic] [ERROR] Could not extract audio from stream_urls payload.");
-				break; // 200 bez danych – nie ma sensu retry tej samej ścieżki
+				break;
 			}
 
 			if (res.status >= 500 && res.status < 600) {
-				// Backoff
-				try {
-					Thread.sleep(300L * attempt);
-				} catch (InterruptedException ie) {
-					Thread.currentThread().interrupt();
-				}
+				try { Thread.sleep(300L * attempt); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
 				continue;
 			}
-
-			// Inne kody niż 2xx i 5xx – przerwij pętlę i przejdź do fallbacków
 			break;
 		}
 
@@ -684,21 +722,39 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 		for (String endpoint : alt) {
 			String altUrl = base + endpoint + "?id=" + trackId;
 			System.out.println("[AmazonMusic] [DEBUG] Fallback fetching from: " + altUrl);
-			HttpResponse altRes = httpGet(altUrl);
-			System.out.println("[AmazonMusic] [DEBUG] Fallback response status: " + altRes.status);
-			System.out.println("[AmazonMusic] [DEBUG] Fallback response JSON: " + altRes.body);
-			if (altRes.status == 200) {
-				AudioUrlResult parsed = parseAudioFromJson(altRes.body);
-				if (parsed != null && parsed.audioUrl != null) {
-					return parsed;
-				}
-			}
+			AudioUrlResult parsed = tryFetchAndParse(altUrl, 2);
+			if (parsed != null && parsed.audioUrl != null) return parsed;
 		}
 
 		// Fallback 2: spróbuj z /track?id=..., czasem endpoint track zawiera te same pola (urls/data)
 		AudioUrlResult trackFallback = tryFetchAudioViaTrackEndpoint(trackId);
 		if (trackFallback != null && trackFallback.audioUrl != null) {
 			return trackFallback;
+		}
+
+		// Fallback 3: jeśli mamy asset_qualities z /track, spróbuj wymusić quality na /stream_urls
+		try {
+			TrackJson meta = fetchTrackInfo(trackId);
+			List<String> qualities = new ArrayList<>();
+			if (meta != null && meta.assetQualities != null && meta.assetQualities.length > 0) {
+				qualities.addAll(Arrays.asList(meta.assetQualities));
+			}
+			if (qualities.isEmpty()) {
+				qualities.addAll(Arrays.asList("MP3", "CD", "HD", "ULTRA_HD"));
+			}
+			for (String q : qualities) {
+				String qUrl = base + "stream_urls?id=" + trackId + "&quality=" + encode(q);
+				System.out.println("[AmazonMusic] [DEBUG] Quality fallback fetching from: " + qUrl);
+				AudioUrlResult parsed = tryFetchAndParse(qUrl, 2);
+				if (parsed != null && parsed.audioUrl != null) return parsed;
+			}
+			// Ostatnia próba: wymuś codec=mp3
+			String codecUrl = base + "stream_urls?id=" + trackId + "&codec=mp3";
+			System.out.println("[AmazonMusic] [DEBUG] Codec fallback fetching from: " + codecUrl);
+			AudioUrlResult parsed = tryFetchAndParse(codecUrl, 2);
+			if (parsed != null && parsed.audioUrl != null) return parsed;
+		} catch (Exception ignored) {
+			// cichy fallback – brak meta nie powinien przerywać
 		}
 
 		System.err.println("[AmazonMusic] [ERROR] audioUrl is still null after processing stream endpoints for track: " + trackId);
@@ -722,7 +778,10 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 			if (audioUrl == null) audioUrl = extractJsonString(urlsContent, "low");
 		}
 		if (audioUrl == null) {
+			// dodatkowe popularne klucze
 			audioUrl = extractJsonString(json, "audioUrl");
+			if (audioUrl == null) audioUrl = extractJsonString(json, "streamUrl");
+			if (audioUrl == null) audioUrl = extractJsonString(json, "signedUrl");
 		}
 
 		// 2) Jeśli brak lub niepewne, spróbuj data[] z base_url i dodatkowymi polami
@@ -769,6 +828,11 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 				artworkUrl = bestArtwork;
 				isrc = bestIsrc;
 			}
+		}
+
+		// 3) Ostatnia deska ratunku: wyszukaj pierwszy bezpośredni URL audio po rozszerzeniu
+		if (audioUrl == null || audioUrl.isEmpty()) {
+			audioUrl = extractUrlByExtensions(json, "mp3", "m4a", "flac", "ogg", "wav", "m3u8");
 		}
 
 		if (audioUrl == null || audioUrl.isEmpty()) {
@@ -821,6 +885,25 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 		return new HttpResponse(status, content.toString());
 	}
 
+	// Pomocnicze: fetch z retry i parsowaniem
+	private AudioUrlResult tryFetchAndParse(String url, int attempts) throws IOException {
+		for (int i = 1; i <= attempts; i++) {
+			HttpResponse res = httpGet(url);
+			System.out.println("[AmazonMusic] [DEBUG] Fallback response status: " + res.status + " (attempt " + i + "/" + attempts + ")");
+			System.out.println("[AmazonMusic] [DEBUG] Fallback response JSON: " + res.body);
+			if (res.status == 200) {
+				AudioUrlResult parsed = parseAudioFromJson(res.body);
+				if (parsed != null && parsed.audioUrl != null) return parsed;
+			}
+			if (res.status >= 500 && res.status < 600) {
+				try { Thread.sleep(200L * i); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+				continue;
+			}
+			break;
+		}
+		return null;
+	}
+
 	/**
 	 * Extracts a JSON string value for a given key using regex (no JSON parser used).
 	 */
@@ -839,35 +922,30 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
         return matcher.find() ? Long.parseLong(matcher.group(1)) : def;
     }
 
-    // Helper to convert TrackJson to JSON string for parser (full data)
-    private String trackToJson(TrackJson track) {
-        StringBuilder sb = new StringBuilder("{");
-        if (track.id != null) sb.append("\"id\":\"").append(track.id).append("\",");
-        if (track.title != null) sb.append("\"title\":\"").append(track.title).append("\",");
-        if (track.artist != null) sb.append("\"artist\":\"").append(track.artist).append("\",");
-        sb.append("\"duration\":").append(track.duration).append(",");
-        if (track.audioUrl != null) sb.append("\"audioUrl\":\"").append(track.audioUrl).append("\",");
-        if (track.asin != null) sb.append("\"asin\":\"").append(track.asin).append("\",");
-        if (track.artworkUrl != null) sb.append("\"image\":\"").append(track.artworkUrl).append("\",");
-        if (track.isrc != null) sb.append("\"isrc\":\"").append(track.isrc).append("\"");
-        sb.append("}");
-        return sb.toString().replace(",}", "}");
+    // NOWOŚĆ: parsowanie boolean
+    private boolean extractJsonBoolean(String json, String key, boolean def) {
+        Matcher matcher = Pattern.compile("\"" + Pattern.quote(key) + "\"\\s*:\\s*(true|false)").matcher(json);
+        return matcher.find() ? Boolean.parseBoolean(matcher.group(1)) : def;
     }
 
-    private static boolean isSupportedAudioFormat(String audioUrl) {
-        return audioUrl.matches("(?i).+\\.(mp3|m4a|flac|ogg|wav)(\\?.*)?$");
-    }
-
-    /**
-     * Extracts a query parameter value from a URL.
-     *
-     * @param url The URL to extract the parameter from.
-     * @param paramName The name of the parameter to extract.
-     * @return The value of the parameter, or null if not found.
-     */
-    private String extractQueryParam(String url, String paramName) {
-        Matcher matcher = Pattern.compile("[?&]" + Pattern.quote(paramName) + "=([^&]*)").matcher(url);
-        return matcher.find() ? matcher.group(1) : null;
+    // NOWOŚĆ: wycięcie pod-obiektu JSON: key: { ... }
+    private String extractObject(String json, String key) {
+        int keyIdx = json.indexOf("\"" + key + "\"");
+        if (keyIdx == -1) return null;
+        int braceStart = json.indexOf('{', keyIdx);
+        if (braceStart == -1) return null;
+        int depth = 0;
+        for (int i = braceStart; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (c == '{') depth++;
+            else if (c == '}') {
+                depth--;
+                if (depth == 0) {
+                    return json.substring(braceStart, i + 1);
+                }
+            }
+        }
+        return null;
     }
 
     // Dodaj klasę TrackJson
@@ -880,6 +958,35 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
         String asin;
         String artworkUrl;
         String isrc;
+
+        // Metadane rozszerzone z /track -> data
+        String url;
+        int trackNum;
+        int discNum;
+        String genre;
+        long releaseDate;
+        boolean explicit;
+        boolean hasLyrics;
+        String languages;
+        String primaryArtistName;
+        boolean isFree;
+        boolean isPrime;
+        boolean isMusicSubscription;
+        boolean isSonicRush;
+        String type;
+        String[] assetQualities;
+
+        // Album
+        String albumTitle;
+        String albumAsin;
+        String albumId;
+        String albumImage;
+        String albumUrl;
+
+        // Artist
+        String artistId;
+        String artistAsin;
+        String artistUrl;
     }
 
     // Klasa pomocnicza do zwracania audioUrl, artworkUrl i isrc
