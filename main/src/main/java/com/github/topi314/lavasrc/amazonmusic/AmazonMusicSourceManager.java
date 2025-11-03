@@ -773,23 +773,23 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 		Matcher urlsMatcher = Pattern.compile("\"urls\"\\s*:\\s*\\{(.*?)\\}").matcher(json);
 		if (urlsMatcher.find()) {
 			String urlsContent = urlsMatcher.group(1);
-			// preferuj formaty wspierane przez Lavaplayer (bez mp4)
-			String[] keys = new String[] { "high", "medium", "low" };
-			for (String k : keys) {
-				String u = extractJsonString(urlsContent, k);
-				if (u != null && formatScore(u) > 0) {
-					audioUrl = u;
-					break;
-				}
-			}
-			// jeśli w urls* są tylko mp4/DRM, zostaw audioUrl puste, by wymusić fallback
+			audioUrl = extractJsonString(urlsContent, "high");
+			if (audioUrl == null) audioUrl = extractJsonString(urlsContent, "medium");
+			if (audioUrl == null) audioUrl = extractJsonString(urlsContent, "low");
+		}
+		if (audioUrl == null) {
+			// dodatkowe popularne klucze
+			audioUrl = extractJsonString(json, "audioUrl");
+			if (audioUrl == null) audioUrl = extractJsonString(json, "streamUrl");
+			if (audioUrl == null) audioUrl = extractJsonString(json, "signedUrl");
 		}
 
-		// 2) Jeśli brak lub niepewne, spróbuj data[] z base_url – pomijaj DRM i mp4
+		// 2) Jeśli brak lub niepewne, spróbuj data[] z base_url i dodatkowymi polami
 		if (audioUrl == null || audioUrl.isEmpty()) {
 			String bestUrl = null;
 			String bestArtwork = null;
 			String bestIsrc = null;
+			String bestMime = null;
 			int bestScore = -1;
 
 			Matcher dataArrayMatcher = Pattern.compile("\"data\"\\s*:\\s*\\[(.*?)\\](?!\\s*,)").matcher(json);
@@ -799,47 +799,58 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 				while (entryMatcher.find()) {
 					String entry = entryMatcher.group(1);
 
-					// pomiń oczywisty DRM
-					boolean hasDrm = entry.contains("\"content_protection\"")
-						|| entry.contains("\"pssh\"")
-						|| entry.matches("(?is).*\"value\"\\s*:\\s*\"cenc\".*");
-					if (hasDrm) {
-						System.out.println("[AmazonMusic] [DEBUG] Skipping DRM-protected representation.");
-						continue;
-					}
-
+					String mimeType = extractJsonString(entry, "mime_type");
 					String baseUrl = extractJsonString(entry, "base_url");
+					String codecs = extractJsonString(entry, "codecs");
 					String entryArtwork = extractJsonString(entry, "image");
 					String entryIsrc = extractJsonString(entry, "isrc");
 
-					int score = formatScore(baseUrl); // preferuj mp3 > m3u8 > ogg > flac > wav; mp4 == 0
+					int score = 0;
+					if (mimeType != null && mimeType.contains("mp3")) score = 100;
+					else if (codecs != null && codecs.contains("opus")) score = 90;
+					else if (codecs != null && codecs.contains("flac")) score = 80;
+					else if (mimeType != null && mimeType.contains("audio/mp4")) score = 70;
+					else score = 10;
+
 					if (baseUrl != null && score > bestScore) {
 						bestScore = score;
 						bestUrl = baseUrl;
 						bestArtwork = entryArtwork;
 						bestIsrc = entryIsrc;
+						bestMime = mimeType;
 					}
 				}
 			}
 
 			if (bestUrl != null) {
-				System.out.println("[AmazonMusic] [DEBUG] Final candidate (non-DRM, playable): " + bestUrl);
+				System.out.println("[AmazonMusic] [DEBUG] Final base_url: " + bestUrl + " (mime_type: " + bestMime + ")");
 				audioUrl = bestUrl;
 				artworkUrl = bestArtwork;
 				isrc = bestIsrc;
 			}
 		}
 
-		// 3) Ostatnia deska ratunku: wyszukaj pierwszy bezpośredni URL audio po rozszerzeniu (bez mp4)
+		// 3) Ostatnia deska ratunku: wyszukaj pierwszy bezpośredni URL audio po rozszerzeniu
 		if (audioUrl == null || audioUrl.isEmpty()) {
-			audioUrl = extractUrlByExtensions(json, "mp3", "m3u8", "ogg", "flac", "wav");
+			audioUrl = extractUrlByExtensions(json, "mp3", "m4a", "flac", "ogg", "wav", "m3u8");
 		}
 
-		// jeśli nadal brak – daj szansę wyższym fallbackom
 		if (audioUrl == null || audioUrl.isEmpty()) {
 			return null;
 		}
 		return new AudioUrlResult(audioUrl, artworkUrl, isrc);
+	}
+
+	// Fallback: pobierz JSON z /track?id=... i użyj tego samego parsera
+	private AudioUrlResult tryFetchAudioViaTrackEndpoint(String trackId) throws IOException {
+		String base = apiUrl.endsWith("/") ? apiUrl : apiUrl + "/";
+		String trackUrl = base + "track?id=" + trackId;
+		System.out.println("[AmazonMusic] [DEBUG] Fallback via track endpoint: " + trackUrl);
+		HttpResponse res = httpGet(trackUrl);
+		System.out.println("[AmazonMusic] [DEBUG] Track endpoint status: " + res.status);
+		System.out.println("[AmazonMusic] [DEBUG] Track endpoint JSON: " + res.body);
+		if (res.status != 200) return null;
+		return parseAudioFromJson(res.body);
 	}
 
 	// Prosty helper HTTP czytający również error stream
@@ -974,11 +985,9 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
     }
 
     // NOWOŚĆ: sprawdzanie obsługiwanych rozszerzeń URL audio
-    // UWAGA: usuwamy mp4 – brak wsparcia w używanym Lavaplayer, unika NPE z containerTrackFactory
     private static boolean isSupportedAudioFormat(String audioUrl) {
         if (audioUrl == null) return false;
-        return audioUrl.matches("(?i).+\\.(mp3|m4a|flac|ogg|wav|m3u8)(\\?.*)?$");
-        //                          ^^^ usunięto mp4
+        return audioUrl.matches("(?i).+\\.(mp3|m4a|flac|ogg|wav|m3u8|mp4)(\\?.*)?$");
     }
 
     // NOWOŚĆ: wyszukanie pierwszego URL-a po rozszerzeniu w surowym JSON
@@ -987,19 +996,6 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
         String joined = String.join("|", quoted);
         Matcher m = Pattern.compile("(https?:\\/\\/[^\"\\s>]+\\.(?:" + joined + "))(?:\\?[^\"\\s]*)?").matcher(json);
         return m.find() ? m.group(1) : null;
-    }
-
-    // NOWOŚĆ: scoring formatów preferowanych przez Lavaplayer (bez mp4)
-    private static int formatScore(String url) {
-        if (url == null) return 0;
-        String u = url.toLowerCase();
-        if (u.contains(".mp3")) return 100;
-        if (u.contains(".m3u8")) return 95;
-        if (u.contains(".ogg")) return 90;
-        if (u.contains(".flac")) return 85;
-        if (u.contains(".wav")) return 80;
-        // mp4 nieobsługiwane – 0 punktów
-        return 0;
     }
 
     // Dodaj klasę TrackJson
