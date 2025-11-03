@@ -8,6 +8,7 @@ import com.sedmelluq.discord.lavaplayer.source.http.HttpAudioSourceManager;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
 import com.sedmelluq.discord.lavaplayer.container.MediaContainerRegistry;
 import com.sedmelluq.discord.lavaplayer.container.MediaContainerDescriptor;
+import com.sedmelluq.discord.lavaplayer.container.MediaContainerProbe;
 
 import java.io.DataOutput;
 import java.io.DataInput;
@@ -48,16 +49,17 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
 
 		System.out.println("[AmazonMusicAudioTrack] [INFO] Processing track with audioUrl: " + audioUrl);
 
-		// Użyj globalnego rejestru kontenerów zamiast httpSourceManager.getContainerRegistry()
-		MediaContainerRegistry registry = MediaContainerRegistry.DEFAULT;
+		// Użyj domyślnego rejestru z aktualnego API
+		MediaContainerRegistry registry = MediaContainerRegistry.DEFAULT_REGISTRY;
 
-		// Dopasuj do nowego API: find przyjmuje String (URL/ścieżkę)
-		MediaContainerDescriptor descriptor = registry.find(audioUrl);
+		// find zwraca probe, z którego tworzymy descriptor
+		MediaContainerProbe probe = registry.find(audioUrl);
 
-		// If no container is found, playback cannot proceed
-		if (descriptor == null) {
+		if (probe == null) {
 			throw new FriendlyException("Could not find a container for the Amazon Music track.", FriendlyException.Severity.SUSPICIOUS, null);
 		}
+
+		MediaContainerDescriptor descriptor = probe.createDescriptor(new AudioReference(audioUrl, trackInfo.title));
 
 		// Create the HttpAudioTrack, passing the original trackInfo, the descriptor, and the source manager
 		InternalAudioTrack httpTrack = new HttpAudioTrack(
