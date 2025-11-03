@@ -1054,33 +1054,4 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
             this.isrc = isrc;
         }
     }
-
-    private AudioUrlResult tryFetchAudioViaTrackEndpoint(String trackId) throws IOException {
-		if (trackId == null) return null;
-		String base = apiUrl.endsWith("/") ? apiUrl : apiUrl + "/";
-
-		// 1) Szybka ścieżka: metadane z /track
-		try {
-			TrackJson meta = fetchTrackInfo(trackId);
-			if (meta != null) {
-				String candidate = meta.audioUrl;
-				// czasem pole "url" jest bezpośrednim odnośnikiem do audio
-				if (candidate == null && meta.url != null && isSupportedAudioFormat(meta.url)) {
-					candidate = meta.url;
-				}
-				if (candidate != null && isSupportedAudioFormat(candidate)) {
-					String art = meta.artworkUrl != null ? meta.artworkUrl : meta.albumImage;
-					return new AudioUrlResult(candidate, art, meta.isrc);
-				}
-			}
-		} catch (Exception ignored) {
-			// ignoruj, spróbuj parsowania surowego JSON
-		}
-
-		// 2) Surowe /track i wspólny parser JSON
-		AudioUrlResult parsed = tryFetchAndParse(base + "track?id=" + trackId, 2);
-		if (parsed != null && parsed.audioUrl != null) return parsed;
-
-		return null;
-	}
 }
