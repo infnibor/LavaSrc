@@ -138,7 +138,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
                 if (albumJson == null || albumJson.tracks == null || albumJson.tracks.length == 0) return null;
                 TrackJson foundTrack = null;
                 for (TrackJson track : albumJson.tracks) {
-                    if (trackAsin.equals(track.id) || trackAsin.equals(extractJsonString(trackToJson(track), "asin", null))) {
+                    if (trackAsin.equals(track.id) || (track.asin != null && trackAsin.equals(track.asin))) {
                         foundTrack = track;
                         break;
                     }
@@ -681,10 +681,10 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
     public void shutdown() {
     }
 
-	/**
-	 * Fetches audioUrl, artworkUrl i isrc z /stream_urls?id={track_id}.
-	 */
-	private AudioUrlResult fetchAudioUrlFromStreamUrls(String trackId) throws IOException {
+    /**
+     * Fetches audioUrl, artworkUrl i isrc z /stream_urls?id={track_id}.
+     */
+    private AudioUrlResult fetchAudioUrlFromStreamUrls(String trackId) throws IOException {
 		if (trackId == null) {
 			System.err.println("[AmazonMusic] [ERROR] Track ID is null.");
 			return null;
@@ -904,7 +904,7 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
 		return null;
 	}
 
-	/**
+    /**
 	 * Extracts a JSON string value for a given key using regex (no JSON parser used).
 	 */
 	private String extractJsonString(String json, String key) {
@@ -946,6 +946,56 @@ public class AmazonMusicSourceManager implements AudioSourceManager {
             }
         }
         return null;
+    }
+
+    // NOWOŚĆ: wyciąganie parametru zapytania z URL
+    private String extractQueryParam(String url, String name) {
+        int q = url.indexOf('?');
+        if (q == -1) return null;
+        String query = url.substring(q + 1);
+        String[] parts = query.split("&");
+        for (String part : parts) {
+            int eq = part.indexOf('=');
+            String key = eq >= 0 ? part.substring(0, eq) : part;
+            if (name.equals(key)) {
+                String val = eq >= 0 ? part.substring(eq + 1) : "";
+                try {
+                    return java.net.URLDecoder.decode(val, "UTF-8");
+                } catch (Exception e) {
+                    return val;
+                }
+            }
+        }
+        return null;
+    }
+
+    // NOWOŚĆ: parser tablicy stringów: "key": ["A","B",...]
+    private String[] extractJsonStringArray(String json, String key) {
+        Matcher m = Pattern.compile("\"" + Pattern.quote(key) + "\"\\s*:\\s*\\[(.*?)\\]").matcher(json);
+        if (!m.find()) return new String[0];
+        String inside = m.group(1).trim();
+        if (inside.isEmpty()) return new String[0];
+        String[] parts = inside.split("\\s*,\\s*");
+        List<String> out = new ArrayList<>();
+        for (String p : parts) {
+            Matcher s = Pattern.compile("^\"(.*?)\"$").matcher(p.trim());
+            if (s.find()) out.add(s.group(1));
+        }
+        return out.toArray(new String[0]);
+    }
+
+    // NOWOŚĆ: sprawdzanie obsługiwanych rozszerzeń URL audio
+    private static boolean isSupportedAudioFormat(String audioUrl) {
+        if (audioUrl == null) return false;
+        return audioUrl.matches("(?i).+\\.(mp3|m4a|flac|ogg|wav|m3u8|mp4)(\\?.*)?$");
+    }
+
+    // NOWOŚĆ: wyszukanie pierwszego URL-a po rozszerzeniu w surowym JSON
+    private String extractUrlByExtensions(String json, String... extensions) {
+        String[] quoted = Arrays.stream(extensions).map(Pattern::quote).toArray(String[]::new);
+        String joined = String.join("|", quoted);
+        Matcher m = Pattern.compile("(https?:\\/\\/[^\"\\s>]+\\.(?:" + joined + "))(?:\\?[^\"\\s]*)?").matcher(json);
+        return m.find() ? m.group(1) : null;
     }
 
     // Dodaj klasę TrackJson
