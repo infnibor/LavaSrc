@@ -6,10 +6,13 @@ import com.sedmelluq.discord.lavaplayer.track.playback.LocalAudioTrackExecutor;
 import com.sedmelluq.discord.lavaplayer.source.http.HttpAudioTrack;
 import com.sedmelluq.discord.lavaplayer.source.http.HttpAudioSourceManager;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
+import com.sedmelluq.discord.lavaplayer.container.MediaContainerRegistry;
+import com.sedmelluq.discord.lavaplayer.container.MediaContainerDescriptor;
 
 import java.io.DataOutput;
 import java.io.DataInput;
 import java.io.IOException;
+// Importations pour ffmpeg et la manipulation de fichiers supprimées
 
 public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
 	private final String audioUrl;
@@ -37,24 +40,82 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
 
 	@Override
 	public void process(LocalAudioTrackExecutor executor) throws Exception {
+		// ...existing code that prepares/obtains audioUrl and trackInfo...
+		final String url = this.audioUrl; // upewnij się, że to finalna odszyfrowana URL do MP4/M4A
+		final AudioTrackInfo info = getInfo();
+
+		// Użyj HttpInterface z SourceManagera (ten sam, którego dotąd używałeś do HTTP)
+		final HttpInterface httpInterface = sourceManager.getHttpInterface();
+
+		try (SeekableInputStream stream = new PersistentHttpStream(httpInterface, new URI(url), null)) {
+			// 1) Spróbuj wykryć kontener z danych
+			MediaContainerDescriptor descriptor = MediaContainerDetection.detectContainer(
+				MediaContainerRegistry.DEFAULT_REGISTRY, stream, info
+			);
+
+			if (descriptor == null) {
+				// 2) Fallback po rozszerzeniu URL, jeśli z jakiegoś powodu detection nic nie zwróciło
+				String lower = url.toLowerCase(Locale.ROOT);
+				if (lower.contains(".mp4") || lower.contains(".m4a")) {
+					descriptor = MediaContainerRegistry.DEFAULT_REGISTRY.byId("mp4");
+				}
+			}
+
+			if (descriptor == null) {
+				throw new FriendlyException("Nie udało się wykryć kontenera dla: " + url, Severity.SUSPICIOUS, null);
+			}
+
+			// 3) Utwórz delegowany track na podstawie descriptor + stream i uruchom go
+			AudioTrack delegate = descriptor.createTrack(info, stream);
+			if (delegate == null) {
+				throw new FriendlyException("Kontener nie zwrócił ścieżki audio (descriptor=" + descriptor + ")", Severity.SUSPICIOUS, null);
+			}
+
+			// Przetwórz delegata przez standardowy executor
+			processDelegate(delegate, executor);
+		} catch (FriendlyException fe) {
+			throw fe;
+		} catch (Exception e) {
+			throw new FriendlyException("Błąd odtwarzania strumienia HTTP: " + url, Severity.SUSPICIOUS, e);
+		}
+	}
+
+	@Override
+	public void process(LocalAudioTrackExecutor executor) throws Exception {
+		// ...existing code that ensures this.audioUrl is the final decrypted URL...
 		final String url = this.audioUrl;
-		if (url == null || url.isEmpty()) {
-			throw new FriendlyException("Brak URL do strumienia audio", FriendlyException.Severity.SUSPICIOUS, null);
+		final AudioTrackInfo info = this.trackInfo; // lub metoda getInfo(), jeśli taka istnieje
+
+		// Dobierz kontener po rozszerzeniu URL
+		String lower = url.toLowerCase(Locale.ROOT);
+		String containerId = null;
+		if (lower.contains(".mp4") || lower.contains(".m4a")) {
+			containerId = "mp4";
+		}
+		if (containerId == null) {
+			throw new FriendlyException("Nieznany kontener dla URL: " + url, Severity.SUSPICIOUS, null);
 		}
 
-		AudioTrackInfo base = getInfo();
-		// Zbuduj info wymagane przez HttpAudioTrack (identifier i uri ustaw na URL)
-		AudioTrackInfo httpInfo = new AudioTrackInfo(
-			base.title,
-			base.author,
-			base.length,
-			url,
-			base.isStream,
-			url
-		);
+		MediaContainerDescriptor descriptor = MediaContainerRegistry.DEFAULT_REGISTRY.find(containerId);
+		if (descriptor == null) {
+			throw new FriendlyException("Brak descriptor dla kontenera: " + containerId, Severity.SUSPICIOUS, null);
+		}
 
-		HttpAudioTrack delegate = new HttpAudioTrack(httpInfo, httpSourceManager);
-		processDelegate(delegate, executor);
+		try (HttpInterface http = httpSourceManager.getHttpInterface();
+		     SeekableInputStream stream = new PersistentHttpStream(http, new URI(url), null)) {
+
+			// Utwórz delegowaną ścieżkę z descriptor + stream
+			InternalAudioTrack delegate = (InternalAudioTrack) descriptor.createTrack(info, stream);
+			if (delegate == null) {
+				throw new FriendlyException("Kontener nie zwrócił ścieżki audio (descriptor=" + descriptor + ")", Severity.SUSPICIOUS, null);
+			}
+
+			processDelegate(delegate, executor);
+		} catch (FriendlyException fe) {
+			throw fe;
+		} catch (Exception e) {
+			throw new FriendlyException("Błąd odtwarzania strumienia HTTP: " + url, Severity.SUSPICIOUS, e);
+		}
 	}
 
 	public void encode(DataOutput output) throws IOException {
