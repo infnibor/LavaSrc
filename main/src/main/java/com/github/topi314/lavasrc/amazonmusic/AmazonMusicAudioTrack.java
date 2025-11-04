@@ -6,14 +6,14 @@ import com.sedmelluq.discord.lavaplayer.track.playback.LocalAudioTrackExecutor;
 import com.sedmelluq.discord.lavaplayer.source.http.HttpAudioTrack;
 import com.sedmelluq.discord.lavaplayer.source.http.HttpAudioSourceManager;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
-import com.sedmelluq.discord.lavaplayer.container.MediaContainerRegistry;
-import com.sedmelluq.discord.lavaplayer.container.MediaContainerDescriptor;
-import com.sedmelluq.discord.lavaplayer.container.MediaContainerProbe;
+import com.sedmelluq.discord.lavaplayer.tools.io.PersistentHttpStream;
+import com.sedmelluq.discord.lavaplayer.container.mpeg.MpegAudioTrack;
+import com.sedmelluq.discord.lavaplayer.tools.io.HttpInterface;
+import java.net.URI;
 
 import java.io.DataOutput;
 import java.io.DataInput;
 import java.io.IOException;
-// Importations pour ffmpeg et la manipulation de fichiers supprimées
 
 public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
     private final String audioUrl;
@@ -49,45 +49,17 @@ public class AmazonMusicAudioTrack extends DelegatedAudioTrack {
 
         System.out.println("[AmazonMusicAudioTrack] [INFO] Processing track with audioUrl: " + audioUrl);
 
-        MediaContainerRegistry registry = MediaContainerRegistry.DEFAULT_REGISTRY;
-
-        // Use a cleaned identifier (without query string) to help extension-based matching
-        String identifierForProbe = audioUrl;
-        int q = identifierForProbe.indexOf('?');
-        if (q >= 0) {
-            identifierForProbe = identifierForProbe.substring(0, q);
-        }
-
-        MediaContainerProbe probe = registry.find(identifierForProbe);
-
-        // If still not detected, try a couple of common fallbacks based on likely Amazon Music formats
-        if (probe == null) {
-            if (identifierForProbe.endsWith(".mp4") || identifierForProbe.endsWith(".m4a")) {
-                // Try with a dummy name to force extension-based lookup
-                probe = registry.find("dummy.m4a");
-                if (probe == null) {
-                    probe = registry.find("dummy.mp4");
-                }
+        try (HttpInterface httpInterface = this.httpSourceManager.getHttpInterface()) {
+            try (PersistentHttpStream stream = new PersistentHttpStream(httpInterface, new URI(this.audioUrl), this.trackInfo.length)) {
+                processDelegate(new MpegAudioTrack(this.trackInfo, stream), executor);
             }
+        } catch (Exception e) {
+            throw new com.sedmelluq.discord.lavaplayer.tools.FriendlyException(
+                "Failed to load Amazon Music track from stream.",
+                com.sedmelluq.discord.lavaplayer.tools.FriendlyException.Severity.SUSPICIOUS,
+                e
+            );
         }
-
-        if (probe == null) {
-            throw new FriendlyException("Could not find a container for the Amazon Music track.", FriendlyException.Severity.SUSPICIOUS, null);
-        }
-
-        // Create descriptor from the found probe and original URL
-        MediaContainerDescriptor descriptor = new MediaContainerDescriptor(
-            probe,
-            audioUrl
-        );
-
-        InternalAudioTrack httpTrack = new HttpAudioTrack(
-            trackInfo,
-            descriptor,
-            httpSourceManager
-        );
-
-        processDelegate(httpTrack, executor);
     }
 
     public void encode(DataOutput output) throws IOException {
