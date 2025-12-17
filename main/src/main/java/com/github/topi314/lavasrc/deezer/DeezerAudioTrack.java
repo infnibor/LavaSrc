@@ -184,9 +184,13 @@ public class DeezerAudioTrack extends ExtendedAudioTrack {
 	}
 
 	public boolean is403Exception(Exception e) {
-		if (e instanceof java.io.IOException || e instanceof org.apache.http.client.ClientProtocolException) {
-			String msg = e.getMessage();
-			return msg != null && msg.contains("403");
+		Throwable current = e;
+		while (current != null) {
+			String msg = current.getMessage();
+			if (msg != null && msg.contains("403")) {
+				return true;
+			}
+			current = current.getCause();
 		}
 		return false;
 	}

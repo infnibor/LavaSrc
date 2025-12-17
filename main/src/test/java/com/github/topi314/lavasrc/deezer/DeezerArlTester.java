@@ -2,7 +2,7 @@ package com.github.topi314.lavasrc.deezer;
 
 public class DeezerArlTester {
 	public static void main(String[] args) {
-		String arlUrl = "https://luke.gg/arl";
+		String arlUrl = "http://localhost:5899/arl";
 		DeezerTokenTracker tracker = new DeezerTokenTracker(null, arlUrl);
 		System.out.println("Set arl as URL: " + arlUrl);
 

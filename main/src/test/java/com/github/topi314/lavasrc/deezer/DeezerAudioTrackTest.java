@@ -20,8 +20,11 @@ class DeezerAudioTrackTest {
 	void testRetryLogicOn403() throws Exception {
 		DeezerAudioTrack track = Mockito.mock(DeezerAudioTrack.class, Mockito.CALLS_REAL_METHODS);
 		DeezerTokenTracker tokenTracker = Mockito.mock(DeezerTokenTracker.class);
-		// Simulate 403 on first call, success on second
-		Mockito.doThrow(new ClientProtocolException("403")).doReturn("validArl").when(tokenTracker).getArl();
+		// Simulate 403 on first call, success on second using a runtime exception Mockito accepts
+		Mockito.doThrow(new RuntimeException("Server returned HTTP response code: 403"))
+			.doReturn("validArl")
+			.when(tokenTracker)
+			.getArl();
 
 		// Simulate invalidateArlCache being called
 		Mockito.doNothing().when(tokenTracker).invalidateArlCache();

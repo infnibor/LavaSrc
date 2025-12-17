@@ -10,6 +10,8 @@ import org.apache.http.StatusLine;
 import org.apache.http.HttpEntity;
 import org.apache.http.impl.client.HttpClients;
 import org.mockito.Mockito;
+import org.apache.http.client.utils.URIBuilder;
+import java.net.URI;
 import java.io.ByteArrayInputStream;
 
 class DeezerTokenTrackerTest {
@@ -25,7 +27,7 @@ class DeezerTokenTrackerTest {
 	@Test
 	void testFetchArlFromUrlMocked() throws Exception {
 		String validArl = "a".repeat(192);
-		String arlUrl = "https://luke.gg/arl";
+		String arlUrl = "http://localhost:5899/arl";
 		DeezerTokenTracker tracker = new DeezerTokenTracker(null, arlUrl);
 
 		// Mock HTTP client and response
@@ -39,7 +41,11 @@ class DeezerTokenTrackerTest {
 		Mockito.when(response.getStatusLine()).thenReturn(statusLine);
 		Mockito.when(entity.getContent()).thenReturn(new ByteArrayInputStream(validArl.getBytes()));
 		Mockito.when(response.getEntity()).thenReturn(entity);
-		Mockito.when(httpClient.execute(Mockito.any(HttpGet.class))).thenReturn(response);
+		Mockito.when(httpClient.execute(Mockito.any(HttpGet.class))).thenAnswer(invocation -> {
+			HttpGet request = invocation.getArgument(0);
+			Assertions.assertEquals(arlUrl, request.getURI().toString());
+			return response;
+		});
 
 		try (MockedStatic<HttpClients> mocked = Mockito.mockStatic(HttpClients.class)) {
 			mocked.when(HttpClients::createDefault).thenReturn(httpClient);
@@ -48,4 +54,32 @@ class DeezerTokenTrackerTest {
 		}
 	}
 
+	@Test
+	void testForceRotateArlAddsQueryParam() throws Exception {
+		String validArl = "a".repeat(192);
+		String arlUrl = "http://localhost:5899/arl";
+		DeezerTokenTracker tracker = new DeezerTokenTracker(null, arlUrl);
+
+		CloseableHttpClient httpClient = Mockito.mock(CloseableHttpClient.class);
+		CloseableHttpResponse response = Mockito.mock(CloseableHttpResponse.class);
+		StatusLine statusLine = Mockito.mock(StatusLine.class);
+		HttpEntity entity = Mockito.mock(HttpEntity.class);
+
+		Mockito.when(statusLine.getStatusCode()).thenReturn(200);
+		Mockito.when(response.getStatusLine()).thenReturn(statusLine);
+		Mockito.when(entity.getContent()).thenReturn(new ByteArrayInputStream(validArl.getBytes()));
+		Mockito.when(response.getEntity()).thenReturn(entity);
+		Mockito.when(httpClient.execute(Mockito.any(HttpGet.class))).thenAnswer(invocation -> {
+			HttpGet request = invocation.getArgument(0);
+			URI uri = new URIBuilder(request.getURI()).build();
+			Assertions.assertEquals("1", uri.getQuery().split("=")[1]);
+			return response;
+		});
+
+		try (MockedStatic<HttpClients> mocked = Mockito.mockStatic(HttpClients.class)) {
+			mocked.when(HttpClients::createDefault).thenReturn(httpClient);
+			String rotated = tracker.forceRotateArl();
+			Assertions.assertEquals(validArl, rotated);
+		}
+	}
 }
