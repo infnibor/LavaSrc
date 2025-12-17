@@ -9,12 +9,15 @@ import org.apache.http.impl.client.BasicCookieStore;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
+import org.apache.http.client.utils.URIBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.net.URISyntaxException;
+import java.util.regex.Pattern;
 
 public class DeezerTokenTracker {
 
@@ -30,6 +33,7 @@ public class DeezerTokenTracker {
 	private static final int MAX_ARL_FETCH_ATTEMPTS = 3;
 	private String arlUrlCache = null;
 	private Instant arlLastFetch = null;
+	private static final Pattern ARL_PATTERN = Pattern.compile("[a-zA-Z0-9]{192}");
 
 
 	public DeezerTokenTracker(DeezerAudioSourceManager sourceManager, String arl) {
@@ -40,52 +44,74 @@ public class DeezerTokenTracker {
 		this.arl = arl;
 	}
 
-	public String getArl() {
+	public synchronized String getArl() {
 		if (arl != null && arl.startsWith("http")) {
-			return fetchArlFromUrl();
+			return fetchArlFromUrl(false);
 		}
 		return this.arl;
 	}
 
-	private String fetchArlFromUrl() {
-		if (arlUrlCache != null && arlLastFetch != null && Instant.now().isBefore(arlLastFetch.plus(30, ChronoUnit.MINUTES))) {
+	private String fetchArlFromUrl(boolean forceRotation) {
+		if (!forceRotation && arlUrlCache != null && arlLastFetch != null && Instant.now().isBefore(arlLastFetch.plus(30, ChronoUnit.MINUTES))) {
 			return arlUrlCache;
 		}
 		int attempts = 0;
 		while (attempts < MAX_ARL_FETCH_ATTEMPTS) {
+			var requestUrl = buildArlRequestUrl(forceRotation);
 			try (CloseableHttpClient client = HttpClients.createDefault()) {
-				HttpGet get = new HttpGet(this.arl);
-				var response = client.execute(get);
-				int status = response.getStatusLine().getStatusCode();
-				if (status == 200) {
-					String value = EntityUtils.toString(response.getEntity()).trim();
-					if (isValidArl(value)) {
-						arlUrlCache = value;
-						arlLastFetch = Instant.now();
-						log.info("Fetched arl from URL: {}", value);
-						return value;
+				var get = new HttpGet(requestUrl);
+				try (var response = client.execute(get)) {
+					int status = response.getStatusLine().getStatusCode();
+					if (status == 200) {
+						String value = EntityUtils.toString(response.getEntity()).trim();
+						if (isValidArl(value)) {
+							arlUrlCache = value;
+							arlLastFetch = Instant.now();
+							log.info(forceRotation ? "Fetched rotated arl from URL" : "Fetched arl from URL: {}", forceRotation ? "<hidden>" : value);
+							return value;
+						} else {
+							log.warn("Fetched arl value is invalid: {}", value);
+						}
 					} else {
-						log.warn("Fetched arl value is invalid: {}", value);
+						log.warn("Failed to fetch{} arl from URL, status: {}", forceRotation ? " rotated" : "", status);
 					}
-				} else {
-					log.warn("Failed to fetch arl from URL, status: {}", status);
 				}
 			} catch (Exception e) {
-				log.error("Error fetching arl from URL: {}", this.arl, e);
+				log.error("Error fetching{} arl from URL: {}", forceRotation ? " rotated" : "", this.arl, e);
 			}
 			attempts++;
 		}
-		throw new IllegalStateException("Failed to fetch arl from URL after " + MAX_ARL_FETCH_ATTEMPTS + " attempts");
+		throw new IllegalStateException("Failed to fetch" + (forceRotation ? " rotated" : "") + " arl from URL after " + MAX_ARL_FETCH_ATTEMPTS + " attempts");
 	}
 
-	public boolean isValidArl(String value) {
-		return value != null && value.length() == 192 && value.matches("[a-zA-Z0-9]+$");
+	private String buildArlRequestUrl(boolean forceRotation) {
+		if (!forceRotation) {
+			return this.arl;
+		}
+		try {
+			return new URIBuilder(this.arl).setParameter("force", "1").build().toString();
+		} catch (URISyntaxException e) {
+			log.warn("Failed to append force parameter to arl URL {}, falling back to manual concat", this.arl, e);
+			return this.arl + (this.arl.contains("?") ? "&" : "?") + "force=1";
+		}
 	}
 
-	public void invalidateArlCache() {
+	public synchronized void invalidateArlCache() {
 		arlUrlCache = null;
 		arlLastFetch = null;
 		log.info("arl cache has been cleared");
+	}
+
+	public synchronized String forceRotateArl() {
+		if (this.arl == null || this.arl.isEmpty()) {
+			throw new IllegalStateException("Cannot rotate empty arl configuration");
+		}
+		invalidateArlCache();
+		if (!this.arl.startsWith("http")) {
+			log.debug("Static arl configured, returning existing value after cache clear");
+			return this.arl;
+		}
+		return fetchArlFromUrl(true);
 	}
 
 	private void refreshSession() throws IOException {
@@ -147,6 +173,10 @@ public class DeezerTokenTracker {
 			invalidateArlCache();
 		}
 		this.arl = arl;
+	}
+
+	public boolean isValidArl(String value) {
+		return value != null && ARL_PATTERN.matcher(value).matches();
 	}
 
 	public static class Tokens {

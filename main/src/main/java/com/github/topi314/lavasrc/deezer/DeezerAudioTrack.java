@@ -105,6 +105,7 @@ public class DeezerAudioTrack extends ExtendedAudioTrack {
 		int attempts = 0;
 		final int maxAttempts = 2;
 		Exception lastException = null;
+		String forcedArl = null;
 		while (attempts < maxAttempts) {
 			try (var httpInterface = this.sourceManager.getHttpInterface()) {
 				if (this.isPreview) {
@@ -117,21 +118,23 @@ public class DeezerAudioTrack extends ExtendedAudioTrack {
 					return;
 				}
 
-				String arl = null;
-				try {
-					Object userData = getUserData();
-					if (userData != null) {
-						JsonBrowser jsonUserData = JsonBrowser.parse(userData.toString());
-						if (jsonUserData.get("arl") != null) {
-							arl = jsonUserData.get("arl").text();
-						}
-					}
-				} catch (IOException e) {
-					log.debug("Failed to parse arl from userData", e);
-				}
-
+				String arl = forcedArl;
 				if (arl == null) {
-					arl = this.sourceManager.getTokenTracker().getArl();
+					try {
+						Object userData = getUserData();
+						if (userData != null) {
+							JsonBrowser jsonUserData = JsonBrowser.parse(userData.toString());
+							if (jsonUserData.get("arl") != null) {
+								arl = jsonUserData.get("arl").text();
+							}
+						}
+					} catch (IOException e) {
+						log.debug("Failed to parse arl from userData", e);
+					}
+
+					if (arl == null) {
+						arl = this.sourceManager.getTokenTracker().getArl();
+					}
 				}
 				var cookieStore = new BasicCookieStore();
 				httpInterface.getContext().setCookieStore(cookieStore);
@@ -153,8 +156,8 @@ public class DeezerAudioTrack extends ExtendedAudioTrack {
 					tokens = this.getTokens(httpInterface);
 				} catch (Exception e) {
 					if (is403Exception(e) && attempts == 0) {
-						log.warn("Deezer returned 403, refreshing arl and retrying");
-						this.sourceManager.getTokenTracker().invalidateArlCache();
+						log.warn("Deezer returned 403, forcing ARL rotation and retrying");
+						forcedArl = this.sourceManager.getTokenTracker().forceRotateArl();
 						attempts++;
 						continue;
 					}
@@ -168,8 +171,8 @@ public class DeezerAudioTrack extends ExtendedAudioTrack {
 			}
 			catch (Exception e) {
 				if (is403Exception(e) && attempts == 0) {
-					log.warn("Deezer returned 403, refreshing arl and retrying");
-					this.sourceManager.getTokenTracker().invalidateArlCache();
+					log.warn("Deezer returned 403, forcing ARL rotation and retrying");
+					forcedArl = this.sourceManager.getTokenTracker().forceRotateArl();
 					attempts++;
 					continue;
 				}
